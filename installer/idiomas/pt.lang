@@ -1,0 +1,137 @@
+# Ficheiro de idioma do instalador do Piztu — PORTUGUÊS
+# Formato: chave = valor   (usa \n para quebra de linha; # para comentários)
+# Os %s e %d são substituídos por valores no programa (caminhos, número de máquinas...)
+
+# ── Janela e permissões ────────────────────────────────────────────
+win.title = Piztu — Instalador
+permiso.title = Piztu — Permissão necessária
+permiso.texto = O instalador requer permissões de administrador.\n\nExecuta-o no terminal com:\n\n    sudo ./build/bin/piztu-installer
+permiso.pechar = Fechar
+
+# ── Navegação ──────────────────────────────────────────────────────
+nav.anterior = ← Anterior
+nav.seguinte = Seguinte →
+nav.pechar = Fechar
+nav.finalizar = Terminar
+nav.idioma = Idioma
+nav.progreso = Passo %d de %d
+
+# ── Nomes dos passos (barra lateral) ───────────────────────────────
+paso.benvida = 🏠  Bem-vindo
+paso.instalacion = 1  Instalação
+paso.lamp = 2  LAMP
+paso.filebrowser = 3  File Browser
+paso.completado = ✅  Concluído
+paso.desinstalar = 🗑️  Desinstalar
+
+app.info = Piztu Sistemas\nMartín Pardiñas\npiztu@omeu.gal\npiztu.org
+app.licenza = Licença AGPLv3
+
+# ── Passo 0: Bem-vindo ─────────────────────────────────────────────
+benvida.titulo = Bem-vindo ao instalador do Piztu
+benvida.desc = Este assistente vai guiar-te na instalação do Piztu, o sistema de gestão de salas de informática. Podes fechar e continuar mais tarde.
+benvida.nomes.titulo = 🏷️  Nomes das máquinas
+benvida.nomes.sub = Renomeia o servidor e os clientes antes de instalar
+benvida.nomes.corpo = Cada máquina deve ter um nome único e sequencial:\n  • Servidor:  tux0\n  • Clientes:  tux01, tux02 … tux22  (consoante o nº de máquinas)\n\nEm cada máquina, edita os dois ficheiros e reinicia:\n  sudo nano /etc/hostname\n  sudo nano /etc/hosts\n\nColoca o mesmo nome em ambos os ficheiros e reinicia a máquina.\n\n(Este esquema é apenas uma sugestão: a partir do Piztu também podes adicionar máquinas com nomes arbitrários.)
+benvida.sudo.titulo = 🔑  Permissões sudo (servidor e clientes)
+benvida.sudo.sub = TODAS as máquinas precisam de sudo sem palavra-passe
+benvida.sudo.corpo = O mesmo requisito no servidor e nos clientes. Em cada máquina, executa:\n  sudo visudo\n\nE adiciona no final:\n  utilizador ALL=(ALL) NOPASSWD:ALL\n\n(substitui 'utilizador' pelo nome real do utilizador)\n\n• No SERVIDOR: o utilizador que abre o Piztu. É preciso para instalar e gerir o salt-master.\n• Nos CLIENTES: o utilizador SSH com que o Ansible/Salt se liga.
+benvida.ssh.titulo = 🔐  SSH nas máquinas cliente
+benvida.ssh.sub = openssh-server é obrigatório
+benvida.ssh.corpo = Cada máquina cliente deve ter o servidor SSH instalado e ativo. Instala-o e configura-o assim:\n\n  sudo apt update\n  sudo apt install openssh-server\n  nano /etc/ssh/sshd_config\n\nDescomenta e edita estas linhas:\n  Port 22\n  PermitRootLogin yes\n  PubkeyAuthentication yes\n  PasswordAuthentication yes
+benvida.aviso = ⚠️  Para instalar em /opt/piztu e criar atalhos, executa o instalador com sudo.
+
+# ── Passo 1: Instalação ─────────────────────────────────────────────
+inst.card = Passo 1 — Instalação
+inst.desc = Este passo:\n• Copia os ficheiros do Piztu para %s\n• Instala as dependências do sistema (Ansible, SSH, Wake-on-LAN, Salt…)\n• Ativa o salt-master neste servidor\n• Configura as permissões dos scripts
+inst.out.inicial = Carrega no botão para começar a instalação...
+inst.btn = 🚀 Instalar Piztu
+inst.iniciando = A iniciar a instalação...\n
+inst.erro = \n❌ Erro: %s
+inst.ok = \n✅ Instalação concluída! Continua para o passo seguinte.
+inst.log.extraendo = 📁 A extrair ficheiros para %s…
+inst.log.extraidos = ✅ Ficheiros extraídos\n
+inst.log.apt = 🔄 A atualizar a lista de pacotes…
+inst.log.aptfail = ⚠️  apt-get update falhou, a continuar mesmo assim…
+inst.log.paquetes = 📦 A instalar pacotes apt…
+inst.log.paquetesok = ✅ Pacotes instalados\n
+inst.log.paquetes_individual = ⚠️ Falhou a instalação em bloco; a instalar pacote a pacote…
+inst.log.paquete_fallou = ⚠️ Não foi possível instalar: %s (ignorado)
+inst.log.salt = 🧂 A configurar o salt-master neste servidor…
+inst.log.saltok = ✅ salt-master ativo\n
+inst.log.saltfail = ⚠️  Não foi possível ativar o salt-master: %s
+inst.log.permisos = 🔧 A configurar permissões dos scripts…
+inst.log.permisosok = ✅ Permissões configuradas
+
+# ── Passo 2: LAMP (opcional) ────────────────────────────────────────
+lamp.card = Passo 2 — LAMP
+lamp.desc = Instala Apache, MariaDB e PHP neste servidor. É opcional: salta este passo se já tiveres um servidor LAMP instalado previamente.
+lamp.btn = 🌐 Instalar LAMP
+lamp.form.dbpass = Senha de root do MySQL
+lamp.faltan = ❌ Indica a senha do MySQL.
+lamp.errovars = ❌ Erro ao criar vars temporário: %s
+lamp.erroplaybook = ❌ Playbook não encontrado: %s
+lamp.log.iniciando = 🌐 A instalar LAMP…\n
+lamp.erro = \n❌ Erro: %s
+lamp.ok = \n✅ LAMP instalado! Apache ativo na porta 80.
+
+# ── Passo 3: File Browser (opcional) ─────────────────────────────────
+filebrowser.card = Passo 3 — File Browser
+filebrowser.desc = Instala File Browser neste servidor, para que os alunos possam enviar e descarregar ficheiros a partir do navegador. Requer um servidor web já ativo (instalado no passo anterior ou previamente). É opcional; podes saltar este passo.
+filebrowser.btn = 📁 Instalar File Browser
+filebrowser.doususuarios.titulo = ✅ Vais criar DOIS utilizadores. NÃO são o mesmo.
+filebrowser.doususuarios.corpo = 🔑 admin (aqui em baixo) → a conta do SERVIDOR de ficheiros. Guarda TODOS os trabalhos de TODOS os alunos.\n\n🧑‍🏫 director (dentro do Tao) → a TUA conta pessoal para gerir o Tao (disciplinas, alunos). É criada depois, na primeira vez que abrires o Tao, escrevendo "director" como utilizador.\n\nNão podem ser fundidos: vivem em sítios diferentes e fazem coisas diferentes. Se escreveres "admin" dentro do Tao, ou "director" no servidor, NÃO vai funcionar.\n\nRegra: "admin" só se escreve AQUI. "director" só se escreve DENTRO do Tao.
+filebrowser.doususuarios.check = Li isto e entendo que "admin" (servidor de ficheiros) e "director" (gestão do Tao) são DOIS utilizadores distintos e independentes — tenho de criar os DOIS separadamente.
+filebrowser.form.fbuser = Utilizador administrador do File Browser
+filebrowser.form.fbpass = Senha do File Browser (mín. 12 caracteres)
+filebrowser.faltan = ❌ Indica o utilizador e a senha do File Browser.
+filebrowser.pass.curto = ❌ A senha do File Browser deve ter pelo menos 12 caracteres.
+filebrowser.user.invalido = ❌ O utilizador só pode conter letras, dígitos, ponto, hífen ou underscore (por exemplo "admin"). Isto parece uma senha: verifica que não trocaste os dois campos.
+filebrowser.errovars = ❌ Erro ao criar vars temporário: %s
+filebrowser.erroplaybook = ❌ Playbook não encontrado: %s
+filebrowser.log.iniciando = 📁 A instalar File Browser…\n
+filebrowser.erro = \n❌ Erro: %s
+filebrowser.ok = \n✅ File Browser instalado! Acede em http://localhost:8080 com o utilizador "%s".
+filebrowser.log.grupo = ⚠️  "%s" foi adicionado ao grupo www-data (para ler as sessões do Tao). Termina a sessão e volta a entrar (ou reinicia) para que faça efeito.
+filebrowser.errofilebrowsercfg = ⚠️  Não foi possível guardar as credenciais de File Browser em config.yaml: %s
+filebrowser.historial.ok = ✅ Serviço de histórico de sessões (piztu-historial) instalado e ativado.
+filebrowser.historial.erro = ⚠️  Não foi possível instalar o serviço de histórico de sessões: %s
+
+# ── Passo 4: Concluído ──────────────────────────────────────────────
+fin.card = ✅  Piztu instalado com sucesso!
+fin.desc = O Piztu foi instalado em %s.\n\nPara configurar a sala (adicionar equipamentos, distribuir a chave SSH e gerar o inventário) abre o Piztu e usa o seu próprio assistente de configuração.\n\nCria os atalhos para aceder ao Piztu a partir do ambiente de trabalho:
+fin.btn = 🖥️  Criar atalhos
+fin.erro = ❌ Erro: %s
+fin.creados = ✅ Atalhos criados:\n• Menu de aplicações (Educação → Piztu)\n• Ambiente de trabalho (Piztu)
+
+# ── Zona de perigo: desinstalação ────────────────────────────────────
+desinst.titulo = ⚠️  Zona de perigo
+desinst.intro = Estas ações desfazem a instalação e não podem ser revertidas. Cada uma é independente: podes desinstalar só o File Browser ou só o LAMP sem tocar no resto do Piztu.
+desinst.confirmar.label = Escreve %s para confirmar
+
+desinst.piztu.card = 🗑️  Desinstalar o Piztu completo
+desinst.piztu.desc = Remove /opt/piztu (configuração, base de dados de posições, histórico…), o salt-master e as suas chaves, o serviço de histórico de sessões, a regra sudoers e a chave SSH configurada, os dados locais do Tao (~/.config/dixitalizacion) e os atalhos e o ícone. NÃO toca no LAMP nem no File Browser: desinstala-os à parte se também os quiseres remover.
+desinst.piztu.palabra = DESINSTALAR
+desinst.piztu.btn = 🗑️  Desinstalar o Piztu completo
+desinst.piztu.confirm = Isto vai remover o Piztu por completo deste servidor, incluindo a base de dados de posições e o histórico. Não pode ser desfeito. Continuar?
+desinst.piztu.erro = \n❌ Erro: %s
+desinst.piztu.ok = \n✅ Piztu desinstalado por completo.
+
+desinst.fb.card = 📁 Desinstalar o File Browser
+desinst.fb.desc = Remove o serviço, o binário e a configuração do File Browser, TODOS os dados do servidor (/var/www/html/arquivos: trabalhos e certificados dos alunos, histórico de sessões, matérias, tarefas, práticas, mensagens…) e os dados locais do Tao deste equipamento (~/.config/dixitalizacion). Não se conserva nada.
+desinst.fb.btn = 📁 Desinstalar o File Browser
+desinst.fb.confirm = Isto vai desinstalar o File Browser e APAGAR todos os seus dados: os trabalhos e certificados dos alunos (/var/www/html/arquivos), o histórico de sessões, as matérias, tarefas e práticas, e os dados locais do Tao deste equipamento (~/.config/dixitalizacion). NÃO se pode desfazer. Continuar?
+desinst.fb.erroplaybook = ❌ Playbook não encontrado: %s
+desinst.fb.log.iniciando = 📁 A desinstalar o File Browser…\n
+desinst.fb.erro = \n❌ Erro: %s
+desinst.fb.datoslocais = 🧭 A eliminar os dados locais do Tao (%s)…
+desinst.fb.ok = \n✅ File Browser desinstalado.
+
+desinst.lamp.card = 🌐 Desinstalar o LAMP
+desinst.lamp.desc = Remove o Apache, o MariaDB e o PHP deste servidor, incluindo todas as bases de dados de MySQL/MariaDB. Não toca no File Browser nem nos seus dados.
+desinst.lamp.btn = 🌐 Desinstalar o LAMP
+desinst.lamp.confirm = Isto vai desinstalar o Apache, o MariaDB e o PHP, incluindo TODAS as bases de dados. Não pode ser desfeito. Continuar?
+desinst.lamp.erroplaybook = ❌ Playbook não encontrado: %s
+desinst.lamp.log.iniciando = 🌐 A desinstalar o LAMP…\n
+desinst.lamp.erro = \n❌ Erro: %s
+desinst.lamp.ok = \n✅ LAMP desinstalado.

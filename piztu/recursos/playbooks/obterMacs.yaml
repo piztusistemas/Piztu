@@ -1,0 +1,12 @@
+---
+- name: Recoller as MACs de todos os equipos
+  hosts: aula
+  gather_facts: yes
+  tasks:
+    - name: Gardar a MAC nun ficheiro local no servidor
+      delegate_to: localhost
+      lineinfile:
+        path: /opt/piztu/lista_macs.txt
+        line: "{{ inventory_hostname }} mac={{ ansible_default_ipv4.macaddress }}"
+        create: yes
+        state: present

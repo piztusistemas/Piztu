@@ -1,0 +1,58 @@
+---
+- name: Distribuír clave SSH a usuarios e /etc/skel
+  hosts: aula
+  become: yes
+  vars:
+    ssh_user: "{{ lookup('env', 'SSH_USER') | default('usuario') }}"
+    ssh_key_priv: "{{ lookup('env', 'SSH_KEY_PRIV') | default(ansible_user_dir + '/.ssh/id_rsa') }}"
+    ssh_key_pub: "{{ lookup('env', 'SSH_KEY_PUB') | default(ansible_user_dir + '/.ssh/id_rsa.pub') }}"
+  tasks:
+    - name: Debug - Mostrar variables
+      debug:
+        msg: "Usuario SSH: {{ ssh_user }}, Clave privada: {{ ssh_key_priv }}"
+
+    - name: Crear cartafol .ssh en /etc/skel
+      file:
+        path: /etc/skel/.ssh
+        state: directory
+        mode: '0700'
+
+    - name: Copiar clave privada a /etc/skel
+      copy:
+        src: "{{ ssh_key_priv }}"
+        dest: /etc/skel/.ssh/id_rsa
+        mode: '0600'
+        remote_src: no
+
+    - name: Crear cartafol .ssh para usuario actual
+      file:
+        path: /home/{{ ssh_user }}/.ssh
+        state: directory
+        owner: "{{ ssh_user }}"
+        group: "{{ ssh_user }}"
+        mode: '0700'
+
+    - name: Copiar clave privada a usuario actual
+      copy:
+        src: "{{ ssh_key_priv }}"
+        dest: /home/{{ ssh_user }}/.ssh/id_rsa
+        owner: "{{ ssh_user }}"
+        group: "{{ ssh_user }}"
+        mode: '0600'
+        remote_src: no
+
+    - name: Engadir clave pública a authorized_keys do usuario actual
+      lineinfile:
+        path: /home/{{ ssh_user }}/.ssh/authorized_keys
+        line: "{{ lookup('file', ssh_key_pub) }}"
+        create: yes
+        owner: "{{ ssh_user }}"
+        group: "{{ ssh_user }}"
+        mode: '0600'
+
+    - name: Engadir clave pública a authorized_keys de /etc/skel
+      lineinfile:
+        path: /etc/skel/.ssh/authorized_keys
+        line: "{{ lookup('file', ssh_key_pub) }}"
+        create: yes
+        mode: '0600'

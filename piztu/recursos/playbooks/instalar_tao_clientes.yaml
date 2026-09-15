@@ -1,0 +1,94 @@
+---
+# instalar_tao_clientes.yaml
+# Despraza o binario de Tao (xa compilado no servidor, embebido no
+# instalador) directamente a /opt/piztu/tao en cada equipo cliente da
+# aula, vía SSH/Ansible, e crea o acceso directo no menú de aplicacións e no
+# escritorio do alumnado.
+#
+# Requerido: -e tao_src=<ruta local no servidor ao binario embebido>
+# Opcional:  -e tao_icon_src=<ruta local no servidor á icona embebida>
+#            (se non se indica, o acceso directo queda sen icona propia)
+
+- name: Instalar Tao nos equipos cliente
+  hosts: aula
+  become: yes
+  gather_facts: no
+  vars:
+    tao_dest_dir: "/opt/piztu"
+    tao_bin_name: "tao"
+    tao_icon_dest: "/usr/share/pixmaps/tao.png"
+    usuario_alumno: "usuario"
+    tao_icon_src: ""
+
+  tasks:
+    - name: Crear /opt/piztu no equipo cliente (se non existise xa)
+      file: {path: "{{ tao_dest_dir }}", state: directory, mode: '0755'}
+
+    - name: Copiar o binario de Tao
+      copy: {src: "{{ tao_src }}", dest: "{{ tao_dest_dir }}/{{ tao_bin_name }}", mode: '0755'}
+
+    - name: Copiar a icona de Tao
+      copy: {src: "{{ tao_icon_src }}", dest: "{{ tao_icon_dest }}", mode: '0644'}
+      when: tao_icon_src | length > 0
+
+    - name: Crear a entrada de menú (Debian/GNOME/KDE)
+      copy:
+        dest: /usr/share/applications/tao.desktop
+        content: |
+          [Desktop Entry]
+          Version=1.0
+          Type=Application
+          Name=Tao
+          Name[gl]=Tao
+          Comment=Rexistro diario e informes asinados do alumnado
+          Comment[gl]=Rexistro diario e informes asinados do alumnado
+          Exec={{ tao_dest_dir }}/{{ tao_bin_name }}
+          Icon={{ tao_icon_dest if tao_icon_src | length > 0 else 'utilities-terminal' }}
+          Terminal=false
+          StartupNotify=true
+          Categories=Education;
+
+    - name: Comprobar se existe o cartafol "Escritorio" (galego/castelán)
+      stat: {path: "/home/{{ usuario_alumno }}/Escritorio"}
+      register: escritorio_gl
+
+    - name: Comprobar se existe o cartafol "Desktop" (inglés)
+      stat: {path: "/home/{{ usuario_alumno }}/Desktop"}
+      register: escritorio_en
+
+    - name: Determinar o(s) cartafol(es) de escritorio do alumnado
+      # Existe só un dos dous -> ese, con confianza. Existen os dous, ou non
+      # existe ningún (perfil aínda sen sesión gráfica aberta) -> dúbida
+      # real: cópiase aos dous, para acertar seguro co que realmente sexa o
+      # escritorio visible do alumno.
+      set_fact:
+        tao_escritorio_dirs: >-
+          {{ ['/home/' + usuario_alumno + '/Escritorio'] if (escritorio_gl.stat.exists and not escritorio_en.stat.exists)
+             else (['/home/' + usuario_alumno + '/Desktop'] if (escritorio_en.stat.exists and not escritorio_gl.stat.exists)
+             else ['/home/' + usuario_alumno + '/Escritorio', '/home/' + usuario_alumno + '/Desktop']) }}
+
+    - name: Crear o(s) cartafol(es) de escritorio se aínda non existisen (caso de dúbida)
+      file: {path: "{{ item }}", state: directory, owner: "{{ usuario_alumno }}", group: "{{ usuario_alumno }}", mode: '0755'}
+      loop: "{{ tao_escritorio_dirs }}"
+
+    - name: Copiar o acceso directo ao(s) escritorio(s) do alumnado
+      copy: {src: /usr/share/applications/tao.desktop, dest: "{{ item }}/tao.desktop", owner: "{{ usuario_alumno }}", group: "{{ usuario_alumno }}", mode: '0755', remote_src: yes}
+      loop: "{{ tao_escritorio_dirs }}"
+      ignore_errors: yes
+
+    - name: Marcar o(s) acceso(s) directo(s) do escritorio coma "de confianza" (GNOME/Nautilus)
+      become_user: "{{ usuario_alumno }}"
+      environment: {DISPLAY: ":0"}
+      command: gio set "{{ item }}/tao.desktop" metadata::trusted true
+      loop: "{{ tao_escritorio_dirs }}"
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Actualizar a base de datos de aplicacións
+      command: update-desktop-database /usr/share/applications
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Finalizado
+      debug:
+        msg: "Tao instalado en {{ tao_dest_dir }}/{{ tao_bin_name }}, con acceso directo no menú e no escritorio."

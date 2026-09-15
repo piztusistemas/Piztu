@@ -1,0 +1,30 @@
+---
+- name: Instalar Visual Studio Code en toda a aula
+  hosts: aula
+  become: yes
+  tasks:
+    - name: Instalar dependencias necesarias
+      apt:
+        name: 
+          - software-properties-common
+          - apt-transport-https
+          - wget
+          - gpg
+        state: present
+        update_cache: yes
+
+    - name: Importar a chave GPG de Microsoft
+      apt_key:
+        url: https://packages.microsoft.com/keys/microsoft.asc
+        state: present
+
+    - name: Engadir o repositorio de VS Code
+      apt_repository:
+        repo: "deb [arch=amd64] https://packages.microsoft.com/repos/code stable main"
+        state: present
+
+    - name: Instalar Visual Studio Code
+      apt:
+        name: code
+        state: present
+        update_cache: yes

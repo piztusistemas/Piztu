@@ -1,0 +1,176 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# config.yaml — Configuración centralizada de Piztu
+# Edita este ficheiro para despregar o sistema noutra aula sen tocar código.
+# ──────────────────────────────────────────────────────────────────────────────
+
+# ── Idioma da interface ───────────────────────────────────────────────────────
+# Idioma das cadeas da aplicación. Os textos están en ficheiros de texto plano
+# editables en  idiomas/<código>.lang  (gl=galego, es=castelán, en=inglés, pt=portugués).
+idioma: "gl"
+
+# ── Motor de execución ────────────────────────────────────────────────────────
+# Backend que controla os equipos: "ansible" ou "salt".
+# É só o valor POR DEFECTO: o usuario pode cambialo en quente desde a interface
+# web (bótón Ansible/Salt). Ese cambio gárdase en motor.txt e ten prioridade.
+motor: "salt"
+
+# ── Rutas do sistema ──────────────────────────────────────────────────────────
+base_dir: "/opt/piztu"
+# base_dir é a raíz de todo. O resto de rutas calcúlanse a partir del,
+# pero podes sobreescribilas individualmente se o necesitas.
+
+# Rutas derivadas (déixaas en branco para usar base_dir/<nome>)
+db_path:       ""          # por defecto: base_dir/piztu.db
+hosts_file:    ""          # por defecto: base_dir/hosts
+umbral_file:   ""          # por defecto: base_dir/umbral.txt
+practicas_dir: ""          # por defecto: base_dir/practicas
+playbooks_dir: ""          # por defecto: base_dir/playbooks
+salt_dir:      ""          # por defecto: base_dir/salt  (estados .sls de Salt)
+motor_file:    ""          # por defecto: base_dir/motor.txt (motor activo en quente)
+tmp_dir:       ""          # por defecto: base_dir/tmp
+
+# ── Usuarios e SSH ────────────────────────────────────────────────────────────
+ssh_user: "usuario"
+ssh_port: 22
+ssh_key_file: ""         # ruta á clave privada, ex: ~/.ssh/id_rsa_piztu_aula
+                         # Se queda baleiro búscase en ~/.ssh por esta orde:
+                         # id_rsa_piztu* > id_rsa > calquera outra id_rsa_*.
+                         # Se no servidor hai varias claves (a de entrar nel e a
+                         # da aula), MELLOR poñela aquí explícita: unha clave que
+                         # os clientes non teñan autorizada dá o erro
+                         # "unable to authenticate, attempted methods [none publickey]".
+ssh_timeout_seconds: 25  # tempo máximo para conectar (resolución + handshake); sube isto se a rede/mDNS vai lenta
+
+# ── Flask / SocketIO ──────────────────────────────────────────────────────────
+flask_secret_key: "piztu_secret"        # Cambia isto en produción
+flask_host:       "0.0.0.0"
+flask_port:       5000
+flask_debug:      true
+max_upload_mb:    512
+
+# ── Rutas remotas nos clientes ────────────────────────────────────────────────
+# O sistema detecta automaticamente Escritorio vs Desktop, pero podes
+# fixar un valor concreto se todos os equipos da aula usan o mesmo idioma.
+# Deixa en branco para detección automática.
+remote_desktop_gl: "/home/usuario/Escritorio"   # Galego/Castelán
+remote_desktop_en: "/home/usuario/Desktop"      # Inglés
+remote_practicas:  "practicas"                   # subcartafol dentro do escritorio
+
+# ── Control de ruído ──────────────────────────────────────────────────────────
+ruido:
+  umbral_defecto:    50      # % de nivel de ruído que dispara o aviso
+  seg_promedio:      30      # segundos de ventá para a media móbil do ruído
+  seg_bloqueo:       30      # segundos que o ruído debe persistir tras o aviso
+                             # antes de bloquear todos os equipos
+  warmup_ciclos:     20      # ciclos de "quecemento" ignorados ao inicio (~6s)
+  rate:              44100   # frecuencia de mostraxe (Hz)
+  channels:          1
+  bytes_per_sample:  2
+  chunk_ms:          300     # tamaño do chunk de audio en milisegundos
+
+  # Verificación post-desbloqueo
+  verificar_desbloqueo:    true
+  max_reintentos:          5
+  espera_entre_intentos:   15   # segundos entre reintentos individuais
+  espera_inicial:          20   # segundos de agarda tras desbloqueo masivo
+
+# ── Ansible ──────────────────────────────────────────────────────────────────
+ansible:
+  # Nome do grupo no inventario que representa a aula completa
+  grupo_aula: "aula"
+
+  # Nomes dos playbooks (sen extensión .yaml)
+  playbooks:
+    acender:    "acenderAula"
+    durmir:     "durmirAula"
+    bloqueo:    "bloqueoTotal"
+    liberar:    "desbloquearAula"
+    apagar:     "apagar_aula"
+    reiniciar:  "reiniciarAula"
+    aviso_ruido: "avisoRuido"
+    comprobar_bloqueo: "comprobar_bloqueo"
+
+# ── SaltStack ─────────────────────────────────────────────────────────────────
+salt:
+  # Target por defecto para a aula completa (grupo de minions ou glob).
+  grupo_aula: "aula"
+
+  # Nomes dos estados .sls (sen extensión) equivalentes a cada acción lóxica.
+  # Deben existir en salt/<nome>.sls e ser espello dos playbooks de Ansible.
+  estados:
+    acender:    "acenderAula"
+    durmir:     "durmirAula"
+    bloqueo:    "bloqueoTotal"
+    liberar:    "desbloquearAula"
+    apagar:     "apagar_aula"
+    reiniciar:  "reiniciarAula"
+    aviso_ruido: "avisoRuido"
+    comprobar_bloqueo: "comprobar_bloqueo"
+
+# ── Interface gráfica (main.py) ───────────────────────────────────────────────
+ui:
+  ping_interval: 5    # segundos entre pings de estado
+  ping_timeout:  1    # timeout por ping en segundos
+  flask_url:     "http://127.0.0.1:5000"
+
+# ── Tao (sesións do alumnado) ──────────────────────────────────────────────────
+# Cartafol raíz de File Browser no SERVIDOR (o mesmo que instala o paso opcional
+# LAMP+File Browser do instalador, ver playbooks/instalar_lamp.yaml). Tao
+# publica aí quen está a usar cada equipo (dixitalizacion/sesions/<equipo>.json);
+# como o servidor Piztu corre na mesma máquina, lese directamente do disco.
+tao:
+  filebrowser_root: "/var/www/html/arquivos"
+  caducidade_seg: 600   # tempo sen actualización tras o que se considera "desconectado"
+
+# ── Historial de sesións (quen usou cada equipo) ──────────────────────────────
+# Rexistra automaticamente, a través da API de File Browser, cada asignación
+# equipo↔alumnado que se manteña estable polo menos `confirmar_seg` segundos
+# (evita rexistrar conexións de proba/erros de arrinque). Ver core/historial_tao.py.
+# O contrasinal é o do usuario administrador de File Browser (mesmo usuario
+# creado en playbooks/instalar_lamp.yaml, tarefa 14).
+filebrowser:
+  url: "http://127.0.0.1:8080"
+  admin_usuario: "admin"
+  admin_contrasinal: ""
+  historial_dir: "dixitalizacion/historial"   # relativo á raíz de File Browser
+  confirmar_seg: 300
+
+# ── Módulos descargables (piztu.org) ──────────────────────────────────────────
+# indice_url: onde vive o catálogo oficial de módulos (nome → versión + url do .zip).
+# catalogo_local: entradas de PROBA que se usan mentres indice_url non responda
+# (ex.: piztu.org aínda non está montado). Cando un módulo apareza no índice
+# remoto, ese ten prioridade sobre a entrada local co mesmo nome.
+#
+# Tres formas de declarar unha entrada:
+#
+#  a) "*" + github_repo: DESCOBRE SÓ TODOS os módulos que haxa nese repo, sen
+#     ter que engadir cada un a man aquí. Calquera .zip que apareza na raíz
+#     do repo, "<id calquera>_versión.zip" (ou "-versión") — ex.:
+#     "cisterna_1.0.0.zip" — aparece só en ⚙ Aula → Módulos co botón
+#     "Descargar" (ou "Actualizar" se xa había unha versión máis vella
+#     instalada), sen tocar este ficheiro nin reiniciar Piztu: abonda con
+#     subilo ao repositorio. É o xeito recomendado; Tao e Xesta xa usan este
+#     camiño, en vez de teren unha entrada cada un.
+#
+#  b) <id> + github_repo: coma "*" pero só para UN id xa coñecido de
+#     antemán — útil se un repo hospeda tamén outras cousas que non queres
+#     ofrecer coma módulo. github_prefixo é opcional, por defecto o propio id.
+#
+#  c) <id> + url (+ version opcional): unha URL fixa. version pode omitirse:
+#     se falta, sácase do propio nome do ficheiro en "url" (ex.:
+#     "tao_26.3.zip" → 26.3); só fai falla explícita se o nome non leva o
+#     número ("tao.zip" a secas).
+modulos:
+  indice_url: "https://piztu.org/modulos/modulos.json"
+  catalogo_local:
+    "*":
+      github_repo: "piztutao/modulos"
+
+# ── Xesta (asistente de IA) ───────────────────────────────────────────────────
+# Xesta é unha app independente (fóra deste proceso) que usa unha IA para xerar
+# playbooks Ansible / estados Salt a partir dunha petición en linguaxe natural
+# do profesorado, e chama á API de Piztu (blueprints/xesta.py) para executalos
+# na aula e comprobar o resultado. Xesta vive sempre na mesma máquina ca Piztu
+# (lánzaa incrustada nun <iframe>), así que a API non usa TCP nin token: fala
+# por un socket Unix (tmp/xesta.sock, chmod 660) — non hai nada que configurar
+# aquí.

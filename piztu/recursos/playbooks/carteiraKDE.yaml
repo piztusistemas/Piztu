@@ -1,0 +1,30 @@
+---
+- name: Configurar a aula para desactivar KDE Wallet
+  hosts: all              # Aplícase a todos os hosts do teu inventario (cambia "all" polo nome do teu grupo se o prefires)
+  become: true            # Execútase como root para poder escribir en /etc/ e nos homes dos usuarios
+
+  tasks:
+    - name: Desactivar a carteira de KDE por defecto a nivel global
+      ansible.builtin.ini_file:
+        path: /etc/xdg/kwalletrc
+        section: Wallet
+        option: Enabled
+        value: "false"
+        create: yes
+        mode: '0644'
+        owner: root
+        group: root
+
+    - name: Desactivar KDE Wallet nos usuarios actuais (Exemplo)
+      ansible.builtin.ini_file:
+        path: "/home/{{ item }}/.config/kwalletrc"
+        section: Wallet
+        option: Enabled
+        value: "false"
+        create: yes
+        owner: "{{ item }}"
+        group: "{{ item }}"
+        mode: '0644'
+      loop:
+        - "alumno"
+        - "profesor"

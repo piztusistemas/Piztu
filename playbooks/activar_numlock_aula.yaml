@@ -1,0 +1,44 @@
+---
+- name: Configurar e activar NumLock permanente na aula
+  hosts: aula
+  become: yes
+  gather_facts: no  # Non necesitamos recoller facts, así vai máis rápido
+
+  tasks:
+    - name: Instalar numlockx para asegurar o control do teclado
+      apt:
+        name: numlockx
+        state: present
+        update_cache: yes
+
+    - name: Asegurar que o directorio de configuración de SDDM existe
+      file:
+        path: /etc/sddm.conf.d
+        state: directory
+        mode: '0755'
+
+    - name: Configurar SDDM para activar NumLock na pantalla de inicio
+      copy:
+        dest: /etc/sddm.conf.d/numlock.conf
+        content: |
+          [General]
+          Numlock=on
+        mode: '0644'
+
+    - name: Crear activación forzada no Autostart global do sistema
+      copy:
+        dest: /etc/xdg/autostart/numlockx.desktop
+        content: |
+          [Desktop Entry]
+          Type=Application
+          Name=Activar NumLock Aula
+          Exec=numlockx on
+          Icon=keyboard
+          NoDisplay=true
+          X-GNOME-Autostart-enabled=true
+          X-KDE-autostart-after=panel
+        mode: '0644'
+
+    - name: Notificar fin do proceso
+      debug:
+        msg: "Configuración do NumLock aplicada e persistente en {{ inventory_hostname }}"

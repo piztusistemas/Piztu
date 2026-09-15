@@ -1,0 +1,183 @@
+---
+- name: Instalar LAMP + File Browser
+  hosts: localhost
+  connection: local
+  become: yes
+  vars:
+    # Contrasinal do usuario root de MySQL/MariaDB (obrigatorio, sen valor por defecto seguro)
+    mysql_root_pass: "changeme"
+    # Credenciais do administrador de File Browser
+    filebrowser_admin_user: "admin"
+    filebrowser_admin_pass: "changeme"
+    # Axustes opcionais
+    filebrowser_version: "v2.63.18"
+    filebrowser_port: 8080
+    filebrowser_root: "/var/www/html/arquivos"
+    # Usuario do sistema que executa Piztu (app.py/main.py). Se se indica, engádese
+    # ao grupo www-data para que poida LER o cartafol compartido que crea File
+    # Browser (dixitalizacion/, permisos 750 www-data:www-data) — necesario para
+    # que o mapa da aula mostre quen está a usar Tao en cada equipo.
+    # Baleiro = non tocar grupos (o profesor pode engadilo á man máis tarde).
+    piztu_os_user: ""
+
+  tasks:
+    - name: 1. Actualizar índice de paquetes (sen actualizar todo o sistema)
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: 2. Instalar Apache, MariaDB, PHP e ferramentas
+      apt:
+        name:
+          - apache2
+          - mariadb-server
+          - php
+          - php-mysql
+          - libapache2-mod-php
+          - php-cli
+          - php-curl
+          - php-json
+          - php-gd
+          - php-mbstring
+          - php-xml
+          - php-zip
+          - curl
+          - wget
+          - tar
+        state: present
+
+    - name: 3. Habilitar e arrincar Apache e MariaDB
+      service:
+        name: "{{ item }}"
+        state: started
+        enabled: yes
+      loop:
+        - apache2
+        - mariadb
+
+    - name: 4. Configurar o contrasinal do usuario root de MySQL
+      command:
+        argv:
+          - mariadb
+          - -u
+          - root
+          - -e
+          - "ALTER USER 'root'@'localhost' IDENTIFIED BY '{{ mysql_root_pass }}'; FLUSH PRIVILEGES;"
+      no_log: true
+      changed_when: true
+
+    - name: 5. Descargar o binario de File Browser
+      get_url:
+        url: "https://github.com/filebrowser/filebrowser/releases/download/{{ filebrowser_version }}/linux-amd64-filebrowser.tar.gz"
+        dest: /tmp/filebrowser.tar.gz
+        mode: '0644'
+
+    - name: 6. Deter o servizo filebrowser se xa existía (para reconfigurar sen conflitos)
+      command: systemctl stop filebrowser
+      ignore_errors: yes
+      changed_when: false
+
+    - name: 7. Extraer o binario filebrowser en /usr/local/bin
+      command: tar -xzf /tmp/filebrowser.tar.gz -C /usr/local/bin/ filebrowser
+      changed_when: true
+
+    - name: 8. Eliminar o arquivo tar.gz temporal
+      file:
+        path: /tmp/filebrowser.tar.gz
+        state: absent
+
+    - name: 9. Facer executable o binario filebrowser
+      file:
+        path: /usr/local/bin/filebrowser
+        mode: '0755'
+
+    - name: 10. Purgar a base de datos anterior de File Browser
+      file:
+        path: /etc/filebrowser/filebrowser.db
+        state: absent
+
+    - name: 11. Crear os directorios necesarios
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - /etc/filebrowser
+        - "{{ filebrowser_root }}"
+
+    - name: 12. Inicializar a base de datos de File Browser
+      command: /usr/local/bin/filebrowser config init --database=/etc/filebrowser/filebrowser.db
+      changed_when: true
+
+    - name: 13. Configurar enderezo, porto, raíz e log de File Browser
+      command: >
+        /usr/local/bin/filebrowser config set --database=/etc/filebrowser/filebrowser.db
+        --address=0.0.0.0 --port={{ filebrowser_port }}
+        --root={{ filebrowser_root }} --log=/var/log/filebrowser.log
+      changed_when: true
+
+    - name: 14. Crear o usuario administrador de File Browser
+      command: >
+        /usr/local/bin/filebrowser users add {{ filebrowser_admin_user }} '{{ filebrowser_admin_pass }}'
+        --perm.admin=true --database=/etc/filebrowser/filebrowser.db
+      no_log: true
+      changed_when: true
+
+    - name: 15. Crear un ficheiro de proba inicial
+      copy:
+        content: "Benvido a File Browser. O teu servidor LAMP está listo!\n"
+        dest: "{{ filebrowser_root }}/leame.txt"
+
+    - name: 16. Asignar a propiedade a www-data
+      file:
+        path: "{{ item }}"
+        owner: www-data
+        group: www-data
+        recurse: yes
+      loop:
+        - "{{ filebrowser_root }}"
+        - /etc/filebrowser
+
+    - name: 17. Crear o servizo systemd para File Browser
+      copy:
+        dest: /etc/systemd/system/filebrowser.service
+        content: |
+          [Unit]
+          Description=File Browser
+          After=network.target
+
+          [Service]
+          User=www-data
+          Group=www-data
+          ExecStart=/usr/local/bin/filebrowser --database=/etc/filebrowser/filebrowser.db
+          Restart=on-failure
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: 18. Activar e (re)arrincar o servizo File Browser
+      systemd:
+        name: filebrowser
+        daemon_reload: yes
+        enabled: yes
+        state: restarted
+
+    - name: 19. Engadir o usuario de Piztu ao grupo www-data (lectura de sesións de Tao)
+      user:
+        name: "{{ piztu_os_user }}"
+        groups: www-data
+        append: yes
+      when: piztu_os_user is defined and piztu_os_user | length > 0
+      register: piztu_grupo_www_data
+
+    - name: Finalizado
+      debug:
+        msg: >
+          LAMP + File Browser instalados.
+          Apache activo no porto 80. MySQL root configurado.
+          File Browser en http://localhost:{{ filebrowser_port }}
+          (usuario: {{ filebrowser_admin_user }}).
+          {% if piztu_grupo_www_data is defined and piztu_grupo_www_data is changed %}
+          IMPORTANTE: "{{ piztu_os_user }}" engadiuse ao grupo www-data; pecha sesión
+          e volve entrar (ou reinicia) para que Piztu poida ler as sesións de Tao.
+          {% endif %}

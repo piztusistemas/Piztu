@@ -1,0 +1,71 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# config.yaml — Configuración centralizada de xestion-aula
+# Edita este ficheiro para despregar o sistema noutra aula sen tocar código.
+# ──────────────────────────────────────────────────────────────────────────────
+
+# ── Rutas do sistema ──────────────────────────────────────────────────────────
+base_dir: "/home/usuario/xestion-aula"
+# base_dir é a raíz de todo. O resto de rutas calcúlanse a partir del,
+# pero podes sobreescribilas individualmente se o necesitas.
+
+# Rutas derivadas (déixaas en branco para usar base_dir/<nome>)
+db_path:       ""          # por defecto: base_dir/piztu_aula.db
+hosts_file:    ""          # por defecto: base_dir/hosts
+umbral_file:   ""          # por defecto: base_dir/umbral.txt
+practicas_dir: ""          # por defecto: base_dir/practicas
+
+# ── Usuarios e SSH ────────────────────────────────────────────────────────────
+ssh_user: "usuario"
+ssh_port: 22
+
+# ── Flask / SocketIO ──────────────────────────────────────────────────────────
+flask_secret_key: "piztu_aula_secret"   # Cambia isto en produción
+flask_host:       "0.0.0.0"
+flask_port:       5000
+flask_debug:      true
+max_upload_mb:    512
+
+# ── Rutas remotas nos clientes ────────────────────────────────────────────────
+# O sistema detecta automaticamente Escritorio vs Desktop, pero podes
+# fixar un valor concreto se todos os equipos da aula usan o mesmo idioma.
+# Deixa en branco para detección automática.
+remote_desktop_gl: "/home/usuario/Escritorio"   # Galego/Castelán
+remote_desktop_en: "/home/usuario/Desktop"      # Inglés
+remote_practicas:  "practicas"                   # subcartafol dentro do escritorio
+
+# ── Control de ruído ──────────────────────────────────────────────────────────
+ruido:
+  umbral_defecto:    50      # % de nivel de ruído que dispara o aviso
+  seg_promedio:      15      # segundos de ventá para a media
+  warmup_ciclos:     20      # ciclos de "quecemento" ignorados ao inicio (~6s)
+  rate:              44100   # frecuencia de mostraxe (Hz)
+  channels:          1
+  bytes_per_sample:  2
+  chunk_ms:          300     # tamaño do chunk de audio en milisegundos
+
+  # Verificación post-desbloqueo
+  verificar_desbloqueo:    true
+  max_reintentos:          5
+  espera_entre_intentos:   15   # segundos entre reintentos individuais
+  espera_inicial:          20   # segundos de agarda tras desbloqueo masivo
+
+# ── Ansible ──────────────────────────────────────────────────────────────────
+ansible:
+  # Nome do grupo no inventario que representa a aula completa
+  grupo_aula: "aula"
+
+  # Nomes dos playbooks (sen extensión .yaml)
+  playbooks:
+    acender:    "acenderAula"
+    durmir:     "durmirAula"
+    bloqueo:    "bloqueoTotal"
+    liberar:    "desbloquearAula"
+    apagar:     "apagar_aula"
+    aviso_ruido: "avisoRuido"
+    comprobar_bloqueo: "comprobar_bloqueo"
+
+# ── Interface gráfica (main.py) ───────────────────────────────────────────────
+ui:
+  ping_interval: 5    # segundos entre pings de estado
+  ping_timeout:  1    # timeout por ping en segundos
+  flask_url:     "http://127.0.0.1:5000"

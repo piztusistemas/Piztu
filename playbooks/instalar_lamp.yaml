@@ -1,0 +1,184 @@
+---
+- name: Instalar LAMP
+  hosts: localhost
+  connection: local
+  become: yes
+  vars:
+    # Contrasinal do usuario root de MySQL/MariaDB (obrigatorio, sen valor por defecto seguro)
+    mysql_root_pass: "changeme"
+
+  handlers:
+    - name: Reiniciar Apache
+      service:
+        name: apache2
+        state: restarted
+
+  tasks:
+    - name: 1. Actualizar índice de paquetes (sen actualizar todo o sistema)
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: 1b. Parar calquera servidor MariaDB/MySQL orfo
+      # O preinst de mariadb-server aborta o desempaquetado se atopa un
+      # mysqld/mariadbd vivo ("There is a MariaDB/MySQL server running, but we
+      # failed in our attempts to stop it. Stop it yourself and try again!").
+      # Pasa cando unha desinstalación anterior deixou o proceso orfo: sen
+      # unidade systemd que o pare, "invoke-rc.d mysql stop" devolve 5 e o
+      # preinst sae con erro, deixando TODA a transacción a medias (paquetes
+      # en estado "iU"). Parada limpa: systemd primeiro, logo SIGTERM. Nunca
+      # SIGKILL — matar a golpes un servidor en uso corrompe as táboas.
+      shell:
+        cmd: |
+          set -u
+          vivo() { pgrep -x 'mysqld|mariadbd' > /dev/null; }
+          vivo || exit 0
+          echo PIZTU_MARIADB_PARADO
+          systemctl stop mariadb mysql mysqld 2>/dev/null || true
+          for _ in $(seq 1 10); do vivo || exit 0; sleep 1; done
+          pkill -TERM -x 'mysqld|mariadbd' || true
+          for _ in $(seq 1 15); do vivo || exit 0; sleep 1; done
+          echo "Hai un servidor MariaDB/MySQL que non se deixa parar; párao a man e reintenta." >&2
+          exit 1
+        executable: /bin/bash
+      register: mariadb_orfo
+      changed_when: "'PIZTU_MARIADB_PARADO' in mariadb_orfo.stdout"
+
+    - name: 1c. Rematar instalacións de paquetes quedadas a medias
+      # Se un intento anterior abortou no medio (p.ex. polo preinst de
+      # enriba), os paquetes quedan desempaquetados sen configurar e calquera
+      # apt posterior arrastra o erro. "dpkg --configure -a" péchaos; se non
+      # hai nada pendente non fai nada e devolve 0.
+      command: dpkg --configure -a --force-confdef --force-confold
+      register: dpkg_pendente
+      # Se aínda así non se deixa arranxar, que sexa a tarefa 2 (apt) quen
+      # informe do erro real, non esta.
+      failed_when: false
+      changed_when: "dpkg_pendente.stdout | length > 0"
+
+    - name: 2. Instalar Apache, MariaDB, PHP e ferramentas
+      apt:
+        name:
+          - apache2
+          - mariadb-server
+          - php
+          - php-mysql
+          - libapache2-mod-php
+          - php-cli
+          - php-curl
+          - php-json
+          - php-gd
+          - php-mbstring
+          - php-xml
+          - php-zip
+          - curl
+          - wget
+          - tar
+        state: present
+        # force-confmiss: se un desinstalado anterior borrou conffiles de
+        # paquetes que dpkg segue a ter por instalados, recréaos ao instalar.
+        dpkg_options: force-confdef,force-confold,force-confmiss
+
+    - name: 2b. Recuperar o módulo PHP de Apache se quedou sen conffiles
+      # Cando se desinstala LAMP borrando /etc/apache2 pero sen purgar o
+      # paquete versionado (libapache2-mod-phpX.Y), ao reinstalar apt non o
+      # volve tocar e os ficheiros mods-available/phpX.Y.{load,conf} non se
+      # recrean: Apache queda sen manexador e serve os .php como texto plano.
+      # Hai que reinstalar o paquete VERSIONADO (non o metapaquete
+      # libapache2-mod-php, que non arrastra a reinstalación da dependencia)
+      # con --force-confmiss para que dpkg recree os conffiles; o seu propio
+      # postinst reactiva o módulo.
+      shell:
+        cmd: |
+          set -e
+          if ls /etc/apache2/mods-available/php*.load >/dev/null 2>&1; then
+            exit 0
+          fi
+          pkg=$(dpkg-query -W -f='${Package}\n' 'libapache2-mod-php[0-9]*' 2>/dev/null | grep -E '^libapache2-mod-php[0-9]' | head -n1)
+          pkg=${pkg:-libapache2-mod-php}
+          apt-get install --reinstall -y -q -o Dpkg::Options::=--force-confmiss "$pkg"
+          echo PIZTU_PHP_RECUPERADO
+        executable: /bin/bash
+      register: php_recuperado
+      changed_when: "'PIZTU_PHP_RECUPERADO' in php_recuperado.stdout"
+      notify: Reiniciar Apache
+
+    - name: 2c. Garantir os directorios de configuración de MariaDB
+      # desinstalar_lamp.yaml borra /etc/mysql enteiro. Ao reinstalar,
+      # mariadb-server recrea mariadb.conf.d/ pero NON conf.d/ (pertence a
+      # mysql-common, que segue instalado e apt non volve tocar). O
+      # /etc/mysql/mariadb.cnf ten "!includedir /etc/mysql/conf.d/"; se ese
+      # directorio falta, mariadbd aborta ("Fatal error in defaults
+      # handling") e nin arranca nin se inicializa o datadir.
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0755'
+      loop:
+        - /etc/mysql/conf.d
+        - /etc/mysql/mariadb.conf.d
+
+    - name: 2d. Inicializar o datadir de MariaDB se está baleiro
+      # Nunha reinstalación tras desinstalar, o postinst do paquete non
+      # sempre repobla /var/lib/mysql. Sen as táboas de sistema, mariadbd
+      # sae con erro 1. "creates:" faina idempotente.
+      command: mariadb-install-db --user=mysql --datadir=/var/lib/mysql
+      args:
+        creates: /var/lib/mysql/mysql
+
+    - name: 3. Habilitar e arrincar Apache e MariaDB
+      service:
+        name: "{{ item }}"
+        state: started
+        enabled: yes
+      loop:
+        - apache2
+        - mariadb
+
+    - name: 4. Configurar o contrasinal do usuario root de MySQL
+      # Idempotente: nunha instalación limpa entra por socket (root aínda con
+      # unix_socket); nunha reinstalación onde xa se fixara este mesmo
+      # contrasinal, entra con el. Só falla se root xa ten OUTRO contrasinal
+      # distinto (caso no que hai que arranxalo a man a propósito).
+      shell:
+        cmd: >
+          mariadb -u root -e
+          "ALTER USER 'root'@'localhost' IDENTIFIED BY '{{ mysql_root_pass }}'; FLUSH PRIVILEGES;"
+          || mariadb -u root -p'{{ mysql_root_pass }}' -e
+          "ALTER USER 'root'@'localhost' IDENTIFIED BY '{{ mysql_root_pass }}'; FLUSH PRIVILEGES;"
+        executable: /bin/bash
+      no_log: true
+      changed_when: true
+
+    - name: 5. Comprobar que Apache executa PHP (e non o serve como texto)
+      # Barreira final: antes o playbook remataba con "ok" aínda que PHP non
+      # funcionase. Se isto falla, o playbook falla e o instalador avisa.
+      block:
+        - name: 5a. Escribir un .php de proba
+          copy:
+            dest: /var/www/html/.piztu_phpcheck.php
+            content: "<?php echo 'PIZTU_PHP_OK';\n"
+            mode: '0644'
+
+        - name: 5b. Aplicar reinicios pendentes de Apache antes de probar
+          meta: flush_handlers
+
+        - name: 5c. Pedir o .php de proba por HTTP
+          uri:
+            url: http://localhost/.piztu_phpcheck.php
+            return_content: yes
+          register: phpcheck
+          until: "phpcheck.content is defined and 'PIZTU_PHP_OK' in phpcheck.content"
+          retries: 5
+          delay: 2
+      always:
+        - name: 5d. Borrar o .php de proba
+          file:
+            path: /var/www/html/.piztu_phpcheck.php
+            state: absent
+
+    - name: Finalizado
+      debug:
+        msg: >
+          LAMP instalado. Apache activo no porto 80. MySQL root configurado.
+          PHP verificado (Apache executa .php).

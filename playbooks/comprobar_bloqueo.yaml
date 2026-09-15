@@ -1,0 +1,67 @@
+---
+# comprobar_bloqueo.yaml
+# Comproba se un equipo da aula ten activo un bloqueo de pantalla ou proceso de bloqueo.
+# Devolve changed=1 se está bloqueado, ok=1 se está libre.
+#
+# Adapta a lista de procesos en "bloqueo_procs" ao teu mecanismo de bloqueo real
+# (xtrlock, gnome-screensaver-command, i3lock, lightdm-lock, etc.)
+
+- name: Comprobar estado de bloqueo do equipo
+  hosts: all
+  gather_facts: false
+  become: yes
+
+  vars:
+    # Lista de nomes de proceso que indican bloqueo activo (resgardo, por se
+    # o PID de bloqueoTotal.yaml non estivese vivo por algún motivo).
+    bloqueo_procs:
+      - xtrlock
+      - i3lock
+      - vlock
+      - gnome-screensaver
+      - light-locker
+      - xscreensaver
+      - dm-tool          # lightdm switch-to-greeter
+      - zenity           # bucle de aviso persistente de bloqueoTotal.yaml;
+                         # se sobrevive tras un desbloqueo (kill fallido),
+                         # isto é o único xeito de detectalo
+    # Ficheiro centinela: bloqueoTotal.yaml garda aquí o PID do bucle de
+    # aviso (zenity); desbloquearAula.yaml bórrao ao desbloquear.
+    bloqueo_sentinel: "/tmp/piztu_bloqueo.pid"
+
+  tasks:
+    - name: Comprobar procesos de bloqueo activos
+      shell: |
+        for proc in {{ bloqueo_procs | join(' ') }}; do
+          if pgrep -x "$proc" > /dev/null 2>&1; then
+            echo "BLOQUEADO:$proc"
+            exit 0
+          fi
+        done
+        echo "LIBRE"
+      register: resultado_proc
+      changed_when: "'BLOQUEADO' in resultado_proc.stdout"
+      failed_when: false
+
+    - name: Comprobar ficheiro centinela (se está configurado)
+      stat:
+        path: "{{ bloqueo_sentinel }}"
+      register: sentinel_stat
+      when: bloqueo_sentinel | length > 0
+      failed_when: false
+
+    - name: Marcar como bloqueado se o centinela existe
+      set_fact:
+        bloqueado_por_sentinel: "{{ bloqueo_sentinel | length > 0 and sentinel_stat.stat is defined and sentinel_stat.stat.exists }}"
+
+    - name: Resultado final
+      debug:
+        msg: >-
+          {{
+            'BLOQUEADO (' + resultado_proc.stdout.strip() + ')'
+            if ('BLOQUEADO' in resultado_proc.stdout or bloqueado_por_sentinel | bool)
+            else 'LIBRE'
+          }}
+      changed_when: >-
+        'BLOQUEADO' in resultado_proc.stdout or
+        (bloqueado_por_sentinel is defined and bloqueado_por_sentinel | bool)

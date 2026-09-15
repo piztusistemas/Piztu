@@ -1,0 +1,235 @@
+---
+# Opcións configurables (← pantalla de configuración de "Bloquear", premido
+# 3s sobre o botón; ver internal/db.OpcionsBloqueo en piztu). Cada unha
+# pásase con -e dende ExecutarBloqueo; os defecto de aquí só se aplican se
+# alguén executa este playbook á man, sen pasar por Piztu.
+- name: Bloqueo de Seguridade de Aula e Persistencia de Chaves
+  hosts: aula
+  become: yes
+  vars:
+    usuario_alumno: "usuario"
+    chave_publica: "{{ lookup('file', (ansible_ssh_private_key_file | default('~/.ssh/id_rsa')) ~ '.pub') }}"
+    bloquear_internet: "{{ bloquear_internet | default(false) }}"
+    bloquear_ssh: "{{ bloquear_ssh | default(false) }}"
+    bloquear_son: "{{ bloquear_son | default(false) }}"
+    bloquear_rato: "{{ bloquear_rato | default(true) }}"
+    bloquear_teclado: "{{ bloquear_teclado | default(true) }}"
+
+  tasks:
+    - name: Garantir persistencia de chaves SSH (Usuario e Skel)
+      shell: |
+        mkdir -p /home/{{ usuario_alumno }}/.ssh
+        echo "{{ chave_publica }}" > /home/{{ usuario_alumno }}/.ssh/authorized_keys
+        chown -R {{ usuario_alumno }}:{{ usuario_alumno }} /home/{{ usuario_alumno }}/.ssh
+        chmod 700 /home/{{ usuario_alumno }}/.ssh
+        chmod 600 /home/{{ usuario_alumno }}/.ssh/authorized_keys
+
+        mkdir -p /etc/skel/.ssh
+        echo "{{ chave_publica }}" > /etc/skel/.ssh/authorized_keys
+        chmod 700 /etc/skel/.ssh
+        chmod 600 /etc/skel/.ssh/authorized_keys
+      register: resultado_chaves
+      ignore_errors: yes
+
+    - name: DEBUG — amosar erro de persistencia de chaves
+      debug:
+        msg: "stdout: {{ resultado_chaves.stdout }}\nstderr: {{ resultado_chaves.stderr }}"
+      when: resultado_chaves is failed
+
+    - name: Bloquear entrada física e manter aviso persistente
+      shell: |
+        export DISPLAY=:0
+        export XAUTHORITY=/home/{{ usuario_alumno }}/.Xauthority
+        USER_ID=$(id -u {{ usuario_alumno }})
+        export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$USER_ID/bus
+
+        # O ficheiro de autoridade real NON é ~/.Xauthority (nesta imaxe está
+        # obsoleto/mesturado con cookies doutros nomes de equipo anteriores:
+        # abalar12, tecno... — imaxe clonada reutilizada). O cookie que Xorg
+        # usa de verdade está no seu propio argumento -auth; sen el, xinput
+        # conecta pero queda "non confiable" e as escritas (disable/enable)
+        # fallan con X BadAccess aínda executándoas coma o usuario da sesión.
+        #
+        # Selecciónase o proceso por executable (ps -C Xorg) e non filtrando
+        # "ps -eo cmd" cun grep: ese grep casaba tamén co propio proceso deste
+        # script (o comentario de aquí arriba menciona "Xorg"), e esa liña
+        # contén "-auth ", así que XAUTH_REAL quedaba con varias liñas de lixo
+        # e xinput fallaba con BadAccess — o mesmo erro que isto quere evitar.
+        XAUTH_REAL=$(ps -eo args= -C Xorg | grep -oP '(?<=-auth )\S+' | head -n1)
+        XAUTH_REAL=${XAUTH_REAL:-/home/{{ usuario_alumno }}/.Xauthority}
+
+        # 1. Bloquear rato e/ou teclado (independentes: distínguense por tipo
+        # de dispositivo na propia saída de "xinput list", non só por ID).
+        if command -v xinput > /dev/null; then
+          LISTAXINPUT=$(sudo -u {{ usuario_alumno }} DISPLAY=:0 XAUTHORITY="$XAUTH_REAL" xinput list)
+
+        {% if bloquear_rato | bool %}
+          echo "$LISTAXINPUT" | grep -i pointer | grep -v XTEST | grep -oP 'id=\K[0-9]+' | while read -r id; do
+            if [ "$id" -gt 4 ]; then
+              sudo -u {{ usuario_alumno }} DISPLAY=:0 XAUTHORITY="$XAUTH_REAL" xinput disable "$id" || true
+            fi
+          done
+        {% endif %}
+        {% if bloquear_teclado | bool %}
+          echo "$LISTAXINPUT" | grep -i keyboard | grep -v XTEST | grep -oP 'id=\K[0-9]+' | while read -r id; do
+            if [ "$id" -gt 4 ]; then
+              sudo -u {{ usuario_alumno }} DISPLAY=:0 XAUTHORITY="$XAUTH_REAL" xinput disable "$id" || true
+            fi
+          done
+        {% endif %}
+        fi
+
+        {% if bloquear_rato | bool or bloquear_teclado | bool %}
+        # 2. Lanzar aviso persistente en segundo plano. Só se rato e/ou
+        # teclado están bloqueados (a mensaxe emerxente non ten sentido se o
+        # alumno pode seguir escribindo/movendo o rato con normalidade — ver
+        # internet/SSH/son, que non a amosan). Remata só cando
+        # desbloquearAula.yaml mata o PID gardado aquí. Antes de lanzar un
+        # bucle novo, mátase calquera bucle anterior (por PID e por nome) —
+        # se un bloqueo previo non se desbloqueou ben, evita amorear varios
+        # avisos zenity executándose á vez para sempre.
+        if [ -f /tmp/piztu_bloqueo.pid ]; then
+          kill "$(cat /tmp/piztu_bloqueo.pid)" 2>/dev/null || true
+        fi
+        pkill -u {{ usuario_alumno }} -x zenity 2>/dev/null || true
+
+        (
+          while true; do
+            # LC_ALL=C.UTF-8: sudo -u non conserva LC_CTYPE (queda en "C",
+            # só ASCII) aínda que LANG si se manteña — sen isto zenity
+            # rexeita o texto en galego con tiles ("This option is not
+            # available", sae ao instante e nunca se ve o aviso).
+            sudo -u {{ usuario_alumno }} LC_ALL=C.UTF-8 DISPLAY=:0 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$USER_ID/bus \
+            zenity --warning --title="CONTROL DE AULA" \
+            --text="<span size='xx-large' weight='bold'>EQUIPO BLOQUEADO</span>\n\nPresta atención ás indicacións do profesor." \
+            --no-wrap
+            sleep 1
+          done
+        ) < /dev/null > /dev/null 2>&1 &
+        echo $! > /tmp/piztu_bloqueo.pid
+        {% endif %}
+      register: resultado_bloqueo
+      ignore_errors: yes
+
+    - name: DEBUG — amosar erro de bloqueo
+      debug:
+        msg: "stdout: {{ resultado_bloqueo.stdout }}\nstderr: {{ resultado_bloqueo.stderr }}"
+      when: resultado_bloqueo is failed
+
+    - name: Mutear son
+      command: amixer set Master mute
+      when: bloquear_son | bool
+      ignore_errors: yes
+
+    # Bloqueo de rede: só corta o que INICIA o propio equipo (cadea OUTPUT),
+    # nunca o que entra — a conexión SSH coa que Piztu controla o equipo é
+    # sempre entrante (o servidor conéctase a ela), así que non se ve afectada.
+    #
+    # Historial de problemas atopados (probado nunha máquina real, bac01):
+    #  1. "command -v iptables" busca no PATH, e o PATH dunha shell non
+    #     interactiva baixo become/sudo adoita NON incluír /usr/sbin nin
+    #     /sbin — a comprobación fallaba en silencio e a tarefa "tiña éxito"
+    #     sen aplicar ningunha regra. Solución: localizar por ruta absoluta.
+    #  2. CAUSA REAL: as imaxes actuais (verificado en bac01) NON teñen
+    #     iptables/ip6tables instalados en absoluto — son nftables puro
+    #     (só existe o binario "nft"). Por iso nunca facía nada, con calquera
+    #     das dúas versións anteriores. Solución: usar nft coma primeira
+    #     opción (unha soa táboa "inet" cobre IPv4+IPv6 á vez, sen ter que
+    #     duplicar regras), con iptables/ip6tables coma reserva para equipos
+    #     máis antigos que aínda os teñan.
+    - name: Bloquear internet e/ou SSH saínte do alumno
+      shell: |
+        localizar() {
+          for p in "/usr/sbin/$1" "/sbin/$1" "/usr/bin/$1" "/bin/$1"; do
+            if [ -x "$p" ]; then echo "$p"; return 0; fi
+          done
+          return 1
+        }
+
+        NFT=$(localizar nft) || NFT=""
+        echo "nft: ${NFT:-non atopado}"
+
+        if [ -n "$NFT" ]; then
+          # Táboa e cadea propias (namespace independente doutras regras
+          # nftables/firewalld/ufw que xa existisen no equipo). "inet" cobre
+          # IPv4 e IPv6 na mesma regra, sen ter que escribilas dúas veces.
+          "$NFT" add table inet piztu_bloqueo 2>/dev/null
+          "$NFT" 'add chain inet piztu_bloqueo output { type filter hook output priority 0 ; }' 2>/dev/null
+          "$NFT" flush chain inet piztu_bloqueo output
+
+          "$NFT" add rule inet piztu_bloqueo output oifname "lo" accept
+          "$NFT" add rule inet piztu_bloqueo output ct state established,related accept
+        {% if bloquear_ssh | bool %}
+          # Impide que O ALUMNO inicie el mesmo conexións SSH saíntes
+          # (cliente). Non toca sshd (o servizo que recibe conexións): esa é
+          # a canle coa que Piztu controla o equipo, e ten que seguir
+          # funcionando.
+          "$NFT" add rule inet piztu_bloqueo output tcp dport 22 drop
+        {% endif %}
+        {% if bloquear_internet | bool %}
+          # Permite a rede local (onde vive o servidor de Piztu/Salt: rangos
+          # privadas IPv4, e link-local/unique-local IPv6 — imprescindibles
+          # para ARP/veciñanza e resolución mDNS de nomes .local coma este
+          # mesmo equipo) e corta todo o demais (internet).
+          "$NFT" add rule inet piztu_bloqueo output ip daddr 10.0.0.0/8 accept
+          "$NFT" add rule inet piztu_bloqueo output ip daddr 172.16.0.0/12 accept
+          "$NFT" add rule inet piztu_bloqueo output ip daddr 192.168.0.0/16 accept
+          "$NFT" add rule inet piztu_bloqueo output ip6 daddr fe80::/10 accept
+          "$NFT" add rule inet piztu_bloqueo output ip6 daddr fc00::/7 accept
+          "$NFT" add rule inet piztu_bloqueo output drop
+        {% endif %}
+          echo "Regras nftables (IPv4+IPv6) aplicadas."
+          "$NFT" list chain inet piztu_bloqueo output
+          exit 0
+        fi
+
+        # Reserva para equipos sen nft (imaxes máis antigas con iptables-legacy).
+        IPT=$(localizar iptables) || IPT=""
+        IPT6=$(localizar ip6tables) || IPT6=""
+        echo "iptables: ${IPT:-non atopado} | ip6tables: ${IPT6:-non atopado}"
+
+        if [ -z "$IPT" ] && [ -z "$IPT6" ]; then
+          echo "Nin nft, nin iptables, nin ip6tables atopados; bloqueo de rede omitido"
+          exit 0
+        fi
+
+        if [ -n "$IPT" ]; then
+          "$IPT" -N PIZTU_BLOQUEO 2>/dev/null
+          "$IPT" -F PIZTU_BLOQUEO
+          "$IPT" -C OUTPUT -j PIZTU_BLOQUEO 2>/dev/null || "$IPT" -I OUTPUT -j PIZTU_BLOQUEO
+          "$IPT" -A PIZTU_BLOQUEO -o lo -j RETURN
+          "$IPT" -A PIZTU_BLOQUEO -m state --state ESTABLISHED,RELATED -j RETURN
+        {% if bloquear_ssh | bool %}
+          "$IPT" -A PIZTU_BLOQUEO -p tcp --dport 22 -j DROP
+        {% endif %}
+        {% if bloquear_internet | bool %}
+          "$IPT" -A PIZTU_BLOQUEO -d 10.0.0.0/8 -j RETURN
+          "$IPT" -A PIZTU_BLOQUEO -d 172.16.0.0/12 -j RETURN
+          "$IPT" -A PIZTU_BLOQUEO -d 192.168.0.0/16 -j RETURN
+          "$IPT" -A PIZTU_BLOQUEO -j DROP
+        {% endif %}
+          echo "Regras IPv4 aplicadas (iptables)."
+        fi
+
+        if [ -n "$IPT6" ]; then
+          "$IPT6" -N PIZTU_BLOQUEO 2>/dev/null
+          "$IPT6" -F PIZTU_BLOQUEO
+          "$IPT6" -C OUTPUT -j PIZTU_BLOQUEO 2>/dev/null || "$IPT6" -I OUTPUT -j PIZTU_BLOQUEO
+          "$IPT6" -A PIZTU_BLOQUEO -o lo -j RETURN
+          "$IPT6" -A PIZTU_BLOQUEO -m state --state ESTABLISHED,RELATED -j RETURN
+        {% if bloquear_ssh | bool %}
+          "$IPT6" -A PIZTU_BLOQUEO -p tcp --dport 22 -j DROP
+        {% endif %}
+        {% if bloquear_internet | bool %}
+          "$IPT6" -A PIZTU_BLOQUEO -d fe80::/10 -j RETURN
+          "$IPT6" -A PIZTU_BLOQUEO -d fc00::/7 -j RETURN
+          "$IPT6" -A PIZTU_BLOQUEO -j DROP
+        {% endif %}
+          echo "Regras IPv6 aplicadas (ip6tables)."
+        fi
+      register: resultado_rede
+      ignore_errors: yes
+
+    - name: DEBUG — amosar resultado do bloqueo de rede
+      debug:
+        msg: "stdout: {{ resultado_rede.stdout }}\nstderr: {{ resultado_rede.stderr }}"

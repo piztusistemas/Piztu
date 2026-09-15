@@ -1,0 +1,65 @@
+---
+# instalarSaltMinion.yaml
+# Bootstrap de salt-minion en todos os equipos da aula, vía SSH/Ansible
+# (necesario porque o instalador de Piztu só corre no servidor; esta é a
+# única vía xa dispoñible para chegar aos clientes).
+#
+# Requeridos: -e master_addr=<host ou IP do servidor Salt>
+
+- name: Instalar e configurar salt-minion nos equipos da aula
+  hosts: aula
+  become: yes
+  gather_facts: no
+
+  tasks:
+    # Debian 12 non trae salt-minion nos repositorios oficiais: hai que
+    # engadir o repositorio de SaltProject (Broadcom) antes de instalar.
+    - name: Asegurar dependencias para engadir o repositorio (curl, gnupg)
+      apt:
+        name: [curl, gnupg]
+        state: present
+        update_cache: yes
+
+    - name: Crear directorio de keyrings
+      file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: "0755"
+
+    - name: Descargar e importar a chave GPG de SaltProject
+      shell: |
+        curl -fsSL https://packages.broadcom.com/artifactory/api/security/keypair/SaltProjectKey/public \
+          | gpg --dearmor -o /etc/apt/keyrings/salt-archive-keyring.pgp
+      args:
+        creates: /etc/apt/keyrings/salt-archive-keyring.pgp
+
+    - name: Engadir o repositorio APT de SaltProject
+      get_url:
+        url: https://github.com/saltstack/salt-install-guide/releases/latest/download/salt.sources
+        dest: /etc/apt/sources.list.d/salt.sources
+        mode: "0644"
+
+    - name: Instalar salt-minion
+      apt:
+        name: salt-minion
+        state: present
+        update_cache: yes
+
+    # O id do minion tense que corresponder EXACTAMENTE co nome que Piztu usa
+    # para este equipo (o do ficheiro "hosts"), non co hostname curto por
+    # defecto: se non, "salt <host> ..." nunca atopa o minion.
+    - name: Configurar o master e o id do minion
+      copy:
+        dest: /etc/salt/minion.d/piztu.conf
+        content: |
+          master: {{ master_addr }}
+          id: {{ inventory_hostname }}
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Reiniciar e activar salt-minion
+      systemd:
+        name: salt-minion
+        state: restarted
+        enabled: yes

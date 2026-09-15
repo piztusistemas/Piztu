@@ -1,0 +1,46 @@
+---
+- name: Acender equipos por WoL e Garantir Acceso SSH
+  hosts: aula
+  gather_facts: no
+  vars:
+    usuario_alumno: "usuario"
+    # Cargamos a chave pública local do profesor
+    chave_publica: "{{ lookup('file', (ansible_ssh_private_key_file | default('~/.ssh/id_rsa')) ~ '.pub') }}"
+
+  tasks:
+    - name: Tentar acender o equipo (Wake-on-LAN)
+      community.general.wakeonlan:
+        mac: "{{ mac }}"
+        broadcast: 10.62.165.255
+      delegate_to: localhost
+      ignore_errors: yes
+
+    - name: Verificar se o equipo está accesible por SSH
+      wait_for:
+        host: "{{ inventory_hostname }}"
+        port: 22
+        state: started
+        delay: 0       # Sen espera inicial, comproba de inmediato
+        timeout: 60    # Se en 60s non responde, pasamos ao seguinte (por se está apagado de todo)
+      delegate_to: localhost
+      ignore_errors: yes
+
+    - name: Persistir chaves SSH no Usuario e no Skel
+      # Esta tarefa execútase sempre que o equipo responda por SSH,
+      # estea recén acendido ou xa levara tempo prendido.
+      become: yes
+      shell: |
+        # 1. Configurar para o usuario actual
+        mkdir -p /home/{{ usuario_alumno }}/.ssh
+        echo "{{ chave_publica }}" > /home/{{ usuario_alumno }}/.ssh/authorized_keys
+        chown -R {{ usuario_alumno }}:{{ usuario_alumno }} /home/{{ usuario_alumno }}/.ssh
+        chmod 700 /home/{{ usuario_alumno }}/.ssh
+        chmod 600 /home/{{ usuario_alumno }}/.ssh/authorized_keys
+
+        # 2. Configurar en /etc/skel para futuras sesións/restauracións
+        mkdir -p /etc/skel/.ssh
+        echo "{{ chave_publica }}" > /etc/skel/.ssh/authorized_keys
+        chmod 700 /etc/skel/.ssh
+        chmod 600 /etc/skel/.ssh/authorized_keys
+      when: ansible_facts is not defined # Tentamos executar sempre que haxa conexión
+      ignore_errors: yes

@@ -1,0 +1,7 @@
+---
+- name: Apagar todos os equipos da aula
+  hosts: aula
+  become: yes
+  tasks:
+    - name: Executar apagado
+      shell: /sbin/shutdown -h now
