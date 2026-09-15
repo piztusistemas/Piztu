@@ -1,0 +1,18 @@
+# Binarios compilados e paquetes xerados por "make build" — rexenerables,
+# nunca se publican (ver Makefile: o target "files" fai "rm -rf files" e
+# reconstrúeo enteiro cada vez).
+/build/
+/files/
+/piztu-installer
+/installer
+/assets/logo.png
+
+# Frontend: dist e node_modules xera "wails build" (npm run build por
+# debaixo) — non fai falla trackealos.
+frontend/dist/
+frontend/node_modules/
+frontend/wailsjs/
+
+# Claves SSH de traballo (ex. id_rsa_piztu_aula) — NUNCA publicar unha
+# clave privada real.
+keys/

@@ -1,0 +1,924 @@
+/* Escala de deseño SaaS moderna, compartida con Yang (ver yang/frontend/src/
+   style.css e DESIGN.md) — redeseño pedido explicitamente para achegar Piztu
+   á mesma estética ca Yang. oklch() require WebKitGTK moderno, xa confirmado
+   en produción (2.50.6). */
+:root {
+    color-scheme: light;
+    --bg-main: oklch(97.3% 0.004 264);
+    --panel-bg: oklch(100% 0 0);
+    --header-bg: oklch(100% 0 0);
+    --border-color: oklch(91% 0.006 264);
+    --border-strong: oklch(85% 0.008 264);
+    --text-dark: oklch(23% 0.02 264);
+    --text-muted: oklch(52% 0.018 264);
+    --text-faint: oklch(68% 0.014 264);
+
+    --btn-neutral-bg: oklch(96.8% 0.006 264);
+    --btn-neutral-bg-hover: oklch(90.5% 0.007 264);
+    --btn-neutral-text: oklch(38% 0.018 264);
+
+    --primary: oklch(56% 0.19 276);
+    --primary-hover: oklch(50% 0.2 276);
+    --primary-soft: oklch(94.5% 0.03 276);
+    --primary-soft-border: oklch(86% 0.06 276);
+    --on: #10b981;
+    --on-soft: #d1fae5;
+    --unlock: #06b6d4;
+    --off: #dc2626;
+    --off-soft: #fee2e2;
+    --send: #0ea5e9;
+    --amber: oklch(72% 0.15 70);
+    --amber-soft: oklch(95% 0.045 75);
+    --actualizacion: #2563eb;
+    --actualizacion-hover: #1d4ed8;
+
+    --radius-lg: 16px;
+    --radius: 10px;
+    --radius-sm: 7px;
+
+    --shadow-sm: 0 1px 2px oklch(20% 0.02 264 / .07);
+    --shadow-md: 0 6px 20px oklch(20% 0.02 264 / .09), 0 1px 3px oklch(20% 0.02 264 / .06);
+    --shadow-lg: 0 16px 48px oklch(20% 0.02 264 / .16), 0 3px 10px oklch(20% 0.02 264 / .08);
+
+    --font-ui: "Plus Jakarta Sans", -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "JetBrains Mono", "Cascadia Code", "Fira Mono", monospace;
+}
+
+#app {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    text-align: left;
+    font-family: var(--font-ui);
+    position: relative;
+    isolation: isolate;
+}
+
+/* Iconas de trazo (mesmo estilo ca Yang): 20x20, trazo 1.6, extremos
+   redondeados. Aplícanse como fillos directos dos botóns (non ::before —
+   moitos destes botóns reciben .textContent dinamicamente dende JS, o que
+   borraría calquera pseudo-elemento simulado por contido; un <svg> real
+   sobrevive porque JS pasa a apuntar a un <span> irmán, non ao botón). */
+.icon { width: 14px; height: 14px; flex: none; }
+.btn-main { display: inline-flex; align-items: center; gap: 0.4em; }
+
+/* ── Navbar ─────────────────────────────────────────────────────────── */
+.navbar {
+    background: var(--header-bg);
+    color: var(--text-dark);
+    padding: 7px 12px;
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: clamp(4px, 0.7vw, 8px);
+    border-bottom: 1px solid var(--border-color);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+    overflow-x: auto;
+    position: relative;
+    z-index: 1;
+}
+.navbar-brand { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.navbar-logo {
+    width: 30px;
+    height: 30px;
+    object-fit: contain;
+    padding: 3px;
+    border-radius: var(--radius-sm);
+    background: var(--primary-soft);
+    border: 1px solid var(--primary-soft-border);
+    flex-shrink: 0;
+}
+.navbar h2 {
+    margin: 0;
+    font-size: 1.02rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    color: var(--text-dark);
+    white-space: nowrap;
+}
+/* Antes: justify-content: space-between deixaba o control de son "voando"
+   solto no extremo dereito nunha liña á parte cando .nav-group non collía —
+   agora todo (logo, ruído, botóns) vai en fila, xunto, sen quebrar; se a
+   xanela é máis estreita có contido, .navbar despraza horizontalmente en
+   vez de partirse en dúas liñas. */
+.nav-group { display: flex; align-items: center; gap: clamp(3px, 0.5vw, 6px); flex-wrap: nowrap; flex-shrink: 0; }
+.sep { width: 1px; height: 18px; background: var(--border-color); display: inline-block; flex-shrink: 0; }
+
+/* Grupos: en vez dun botón illado por acción, botóns relacionados
+   (acender/durmir/apagar, bloquear/liberar...) van xuntos nunha mesma
+   "píldora" — mesmo patrón ca .toolbar-group de Yang. */
+.toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    background: var(--btn-neutral-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: 3px;
+    flex-shrink: 0;
+}
+.toolbar-group .btn-main { background: transparent; }
+.toolbar-group .btn-main:hover { background: var(--btn-neutral-bg-hover); }
+/* Dentro dun grupo, só os botóns con cor propia (on/off) manteñen o seu
+   fondo — o resto queda transparente para que a píldora lea coma UN control. */
+.toolbar-group .btn-main.on,
+.toolbar-group .btn-main.off { background: var(--on); }
+.toolbar-group .btn-main.off { background: var(--off); }
+
+.noise-box {
+    display: flex;
+    align-items: center;
+    background: var(--btn-neutral-bg);
+    border: 1px solid var(--border-color);
+    padding: 4px 10px;
+    border-radius: 999px;
+    gap: 8px;
+    font-size: 0.65rem;
+    flex-shrink: 0;
+}
+input[type="range"] { cursor: pointer; accent-color: var(--unlock); height: 4px; width: 80px; }
+
+.vumetro-bg {
+    width: 80px;
+    height: 6px;
+    background: var(--btn-neutral-bg-hover);
+    border-radius: 7px;
+    overflow: hidden;
+}
+#vumetro {
+    width: 0%;
+    height: 100%;
+    background: var(--on);
+    transition: width 0.1s ease, background-color 0.2s;
+}
+
+/* Icona do micrófono: mantida premida 3s activa/desactiva o monitor de
+   ruído (mesmo xesto e animación de "recheo" ca #btn-motor). */
+#btn-mic {
+    position: relative;
+    overflow: hidden;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    width: 21px;
+    height: 21px;
+    border-radius: 50%;
+    cursor: pointer;
+    background: var(--btn-neutral-bg-hover);
+    transition: background-color 0.15s;
+}
+#btn-mic::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.15);
+    transform: scaleX(0);
+    transform-origin: left;
+    pointer-events: none;
+}
+#btn-mic.pressing::before { transition: transform 3s linear; transform: scaleX(1); }
+#btn-mic.activo { background: var(--on); }
+
+/* Estilo neutro por defecto (coma Tao): só .on/.off levan cor. Tamaño ~10%
+   máis pequeno có orixe (7px/12px, 0.78rem) e ademais fluído (clamp, non un
+   valor fixo): en vez de depender só do scroll horizontal de .navbar cando
+   non caben todos os botóns nun monitor pequeno, encollen un pouco antes de
+   chegar a ese punto — o extremo baixo de cada clamp() é o chan legible, o
+   alto é o tamaño "de escritorio" de sempre. */
+.btn-main {
+    padding: clamp(5px, 0.55vw, 6px) clamp(8px, 1vw, 11px);
+    font-size: clamp(0.7rem, 0.95vw, 0.78rem);
+    font-family: inherit;
+    border-radius: var(--radius-sm);
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--btn-neutral-text);
+    background: var(--btn-neutral-bg);
+    white-space: nowrap;
+    transition: background-color 0.15s, filter 0.15s, transform 0.05s;
+}
+.btn-main:hover { background: var(--btn-neutral-bg-hover); }
+.btn-main:active { transform: scale(0.97); }
+.btn-main svg { color: var(--text-muted); transition: color 0.15s ease; }
+.btn-main:hover svg { color: var(--text-dark); }
+.btn-main.on svg, .btn-main.off svg { color: #fff; }
+
+/* Fondo azul e "i" en branco cando hai unha versión nova de Piztu (←
+   pintarSobreActualizacion en main.js). */
+.btn-actualizacion-dispo { background: var(--actualizacion); color: #fff; }
+.btn-actualizacion-dispo:hover { background: var(--actualizacion-hover); }
+.btn-actualizacion-dispo svg { color: #fff; }
+
+/* Botón "Sobre" (ℹ): icona soa, círculo — sen espazo para etiqueta ao carón. */
+#btn-sobre { width: 30px; height: 30px; padding: 0; justify-content: center; border-radius: 50%; flex-shrink: 0; }
+
+/* Acender/Durmir/Apagar/Reiniciar: só a icona, sen etiqueta de texto, para
+   aforrar espazo na cabeceira — o nome segue accesible por "title" (tooltip
+   ao pasar por riba), actualizado en aplicarTraducionsInterno() coma o resto
+   dos botóns. */
+.btn-icon-only { width: 30px; height: 30px; padding: 0; justify-content: center; flex-shrink: 0; }
+.btn-icon-only span { display: none; }
+
+.btn-tao { display: inline-flex; align-items: center; gap: 6px; }
+.btn-tao-logo { width: 16px; height: 16px; object-fit: contain; flex-shrink: 0; }
+
+/* Icona propia dun módulo externo (modulo.json: "iconaImaxe"), no botón do
+   mapa (pintarBotonsExternos) e en ⚙ Aula → Módulos (pintarListaModulos) —
+   mesmo tamaño que .btn-tao-logo, para consistencia visual. */
+.modulo-icona-img { width: 16px; height: 16px; object-fit: contain; vertical-align: middle; margin-right: 2px; }
+
+/* #btn-motor: mantido premido 3s co botón esquerdo abre o menú de motores
+   (mesmo xesto e animación de "recheo" ca #btn-mic). */
+#btn-motor { position: relative; overflow: hidden; }
+#btn-motor::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.1);
+    transform: scaleX(0);
+    transform-origin: left;
+    pointer-events: none;
+}
+#btn-motor.pressing::before { transition: transform 3s linear; transform: scaleX(1); }
+
+/* Módulos: lista de caselas na ventá ⚙ Aula. Os elementos marcados con
+   data-modulo ocúltanse co atributo `hidden` desde aplicarModulos() (Tao/
+   Xesta levan o atributo directamente no seu <button>, coma o noise-box).
+
+   O `display: none` do navegador para [hidden] ten especificidade 0 e pérdeo
+   contra calquera regra que fixe display — e .btn-main fíxao (inline-flex),
+   así que os botóns fixos de Tao/Xesta seguían vendose na barra aínda co
+   módulo desactivado. Por iso vai !important e sen listar clases: calquera
+   elemento novo con data-modulo queda cuberto sen tocar máis o CSS. */
+[hidden] { display: none !important; }
+.grupo-modulo { display: inline-flex; align-items: center; gap: 8px; }
+
+/* Tao/Xesta/Pancho/Yang comparten UN só bloque visual (.toolbar-group, ver
+   marcado base) sen separadores internos — #modulos-externos (Pancho/Yang,
+   pintados en fondo por pintarBotonsExternos) precisa "display: contents"
+   para que os seus botóns fillos entren directamente no flex do grupo en
+   vez de quedar aniñados nun <span> á parte con oco propio. */
+#modulos-externos { display: contents; }
+.modulo-fila {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 2px;
+    color: var(--text-dark);
+    font-size: 0.88em;
+    cursor: pointer;
+}
+.modulo-fila:hover { background: rgba(79,70,229,0.08); border-radius: var(--radius-sm); }
+/* Interruptor en vez de caixa de verificación de sistema (mesmo patrón ca
+   Yang) — o <input type="checkbox"> segue sendo o mesmo elemento, JS non
+   cambia nada, segue lendo .checked coma sempre. */
+.modulo-fila input[type="checkbox"] {
+    appearance: none;
+    margin: 0;
+    flex-shrink: 0;
+    width: 34px;
+    height: 20px;
+    border-radius: 999px;
+    background: var(--border-strong);
+    position: relative;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+.modulo-fila input[type="checkbox"]::after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 999px;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+    transition: left 0.15s ease;
+}
+.modulo-fila input[type="checkbox"]:checked { background: var(--primary); }
+.modulo-fila input[type="checkbox"]:checked::after { left: 16px; }
+.modulo-fila input[type="checkbox"]:disabled { opacity: 0.5; cursor: default; }
+/* Dentro da columna estreita de Módulos (⚙ Aula) abonda cunha soa columna. */
+.lista-modulos-grid { columns: 1; column-gap: 16px; }
+.lista-modulos-grid .modulo-fila { break-inside: avoid; }
+.modulo-etiqueta { font-style: normal; color: var(--text-muted); font-size: 0.86em; }
+/* Publicacións dos módulos: unha liña baixo o nome do equipo. */
+.pc-publicacions {
+    display: block;
+    font-size: 0.62rem;
+    color: var(--text-muted);
+    text-align: center;
+    line-height: 1.2;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-height: 0.8em;
+}
+.pc-publicacions.activo { color: var(--primary); font-weight: 600; }
+
+.modulo-cfg {
+    margin-left: auto;
+    border: 0;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.9em;
+    padding: 0 4px;
+}
+.modulo-cfg:hover { color: var(--primary); }
+
+.modulo-descargar {
+    margin-left: auto;
+    border: 1px solid var(--primary);
+    background: transparent;
+    color: var(--primary);
+    cursor: pointer;
+    font-size: 0.74em;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 12px;
+}
+.modulo-descargar:hover { background: var(--primary); color: #fff; }
+.modulo-descargar:disabled { opacity: 0.5; cursor: default; }
+
+.modulo-actualizar {
+    border-color: #d97706;
+    color: #d97706;
+}
+.modulo-actualizar:hover { background: #d97706; color: #fff; }
+
+.modulo-novo {
+    font-style: normal;
+    font-size: 0.7em;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 10px;
+    background: var(--on);
+    color: #fff;
+}
+.modulo-descricion {
+    margin: -2px 0 2px 26px;
+    font-size: 0.78em;
+    color: var(--text-muted);
+}
+.modulo-onde {
+    margin: -2px 0 6px 26px;
+    font-size: 0.72em;
+    color: var(--text-muted);
+    word-break: break-all;
+}
+.ruta-modulos {
+    display: block;
+    padding: 6px 8px;
+    background: var(--panel-bg);
+    border: 1px solid var(--primary-soft-border);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: 0.76em;
+    color: var(--text-dark);
+    word-break: break-all;
+}
+
+/* Menú de motores: ábrese ao manter premido #btn-motor 3s. `position: fixed`
+   e colocado por JS (abrirMenuMotor) porque a .navbar ten `overflow-x: auto`
+   —para poder desprazar a barra en ventás estreitas— e iso RECORTA calquera
+   menú `absolute` que baixe do seu bordo: quedaba oculto tras o panel da
+   aula. Fixed sáese do recorte e o z-index alto déixao por riba do mapa. */
+.motor-wrap { position: relative; display: inline-block; }
+.motor-menu {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 2000;
+    width: 300px;
+    max-width: 80vw;
+    padding: 4px;
+    background: var(--panel-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+}
+.motor-menu.visible { display: block; }
+.motor-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-dark);
+    font: inherit;
+    font-size: 0.85rem;
+    text-align: left;
+    cursor: pointer;
+}
+.motor-item:hover:not(:disabled) { background: var(--btn-neutral-bg-hover); }
+.motor-item:disabled { color: var(--text-muted); cursor: not-allowed; }
+.motor-item.activo .motor-nome { font-weight: 600; }
+.motor-item i { font-style: normal; color: var(--text-muted); font-size: 0.78rem; }
+.motor-marca { color: var(--primary); flex-shrink: 0; line-height: 1.4; }
+.motor-item:disabled .motor-marca { color: var(--text-muted); }
+.motor-texto { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.motor-desc { color: var(--text-muted); font-size: 0.75rem; line-height: 1.3; }
+
+/* Bloquear: clic simple bloquea coa config gardada; premido 3s (mesma
+   animación de recheo) abre a pantalla de configuración. */
+#btn-bloqueo { position: relative; overflow: hidden; }
+#btn-bloqueo::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.1);
+    transform: scaleX(0);
+    transform-origin: left;
+    pointer-events: none;
+}
+#btn-bloqueo.pressing::before { transition: transform 3s linear; transform: scaleX(1); }
+
+.chk-bloqueo-opcion { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 0.85rem; }
+
+/* Cluster dereito da navbar (ruído, ⚙ Aula, ℹ Sobre) — empuxado ao bordo
+   dereito co margin-left:auto do propio contedor, non dun fillo solto. A
+   antiga píldora de estado ("Listo.") eliminouse, non aportaba nada. */
+.toolbar-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
+/* ── Escenario ──────────────────────────────────────────────────────── */
+#escenario {
+    flex: 1;
+    position: relative;
+    overflow: auto;
+    background-color: var(--bg-main);
+    background-image: radial-gradient(var(--border-color) 1px, transparent 1px);
+    background-size: 22px 22px;
+}
+
+/* ── Panel de log (← log_output/btn_toggle_term de main.py) ───────────── */
+#log-panel {
+    flex-shrink: 0;
+    height: 200px;
+    background: #000;
+    border-top: 2px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    transition: height 0.15s ease;
+}
+#log-panel.collapsed { height: 28px; }
+#log-panel.collapsed #log-output { display: none; }
+
+.log-header {
+    flex-shrink: 0;
+    height: 28px;
+    background: var(--btn-neutral-bg);
+    border-bottom: 1px solid var(--border-color);
+    padding: 0 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-muted);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.log-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    /* Un pouco separado do bordo dereito (en vez de pegado, coma
+       xustify-content: space-between o deixaría) - se algunha vez aparece
+       un scrollbar pegado ao bordo, non tapa os botóns. */
+    margin-right: 4px;
+}
+#btn-clear-log,
+#btn-toggle-log {
+    width: 22px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 3px;
+    background: var(--btn-neutral-bg-hover);
+    color: var(--btn-neutral-text);
+    font-weight: 700;
+    cursor: pointer;
+}
+#btn-clear-log svg { width: 12px; height: 12px; }
+#btn-clear-log:hover,
+#btn-toggle-log:hover { filter: brightness(0.95); }
+
+#log-output {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 10px;
+    color: #4ade80;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    line-height: 1.5;
+}
+#log-output div { white-space: pre-wrap; word-break: break-all; }
+
+/* Iconas de trazo reutilizadas (mesmo estilo có resto do sistema) para dous
+   sitios onde JS xa sobrescribe o .textContent do propio elemento (o
+   ten-ficheiros do cabeceiro e o nome do alumnado de pc-user) — un <svg>
+   fillo real desaparecería en canto pintarTao()/renderEquipos volvesen
+   asignar texto, así que van coma máscara de fondo en ::before/::after, que
+   sobreviven a iso. */
+:root {
+    --icon-folder: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" stroke="%23000" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 5.5a1 1 0 0 1 1-1h4l1.5 2h7a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-12.5a1 1 0 0 1-1-1z"/></svg>');
+    --icon-person: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="none" stroke="%23000" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="7" r="2.6"/><path d="M4.5 16c0-3 2.5-5 5.5-5s5.5 2 5.5 5"/></svg>');
+}
+
+.pc {
+    width: 150px;
+    position: absolute;
+    background: var(--panel-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    overflow: hidden;
+    user-select: none;
+    box-shadow: var(--shadow-md);
+}
+
+/* Cabeceira: premer e soltar sen mover abre o explorador; premer e
+   arrastrar move a tarxeta (ver arrastrarOuAbrir en main.js). O punto de
+   estado (on/off) vai en ::before — non fai falta tocar main.js, xa que
+   .pc-header só leva o nome do equipo coma texto. */
+.pc-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--btn-neutral-bg);
+    padding: 7px 9px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-dark);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: grab;
+    border-bottom: 1px solid var(--border-color);
+}
+.pc-header::before {
+    content: "";
+    flex: none;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--text-faint);
+}
+.pc.online .pc-header::before { background: var(--on); box-shadow: 0 0 0 3px var(--on-soft); }
+.pc.offline .pc-header { color: var(--text-faint); }
+.pc-header:hover { background: var(--primary-soft); color: var(--primary); }
+.pc-header.arrastrando { cursor: grabbing; }
+.pc-header.ten-ficheiros { background: var(--amber-soft); color: #92400e; }
+.pc-header.ten-ficheiros::after {
+    content: "";
+    flex: none;
+    width: 12px;
+    height: 12px;
+    margin-left: auto;
+    background-color: var(--amber);
+    -webkit-mask: var(--icon-folder) center / contain no-repeat;
+    mask: var(--icon-folder) center / contain no-repeat;
+}
+
+/* Nome do alumnado conectado con Tao neste equipo (← estado_tao) */
+.pc-user {
+    display: none;
+    align-items: center;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--primary);
+    background: var(--primary-soft);
+    padding: 3px 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border-bottom: 1px solid var(--border-color);
+}
+.pc-user.activo { display: flex; }
+.pc-user.activo::before {
+    content: "";
+    flex: none;
+    width: 10px;
+    height: 10px;
+    margin-right: 4px;
+    background-color: currentColor;
+    -webkit-mask: var(--icon-person) center / contain no-repeat;
+    mask: var(--icon-person) center / contain no-repeat;
+}
+
+.controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    padding: 6px;
+}
+
+/* Neutro por defecto; só .on/.off (definidas despois) levan cor. Cada botón
+   leva agora unha icona de trazo (ver renderEquipos en main.js) en vez dun
+   texto abreviado (ON/ZZZ/LOK...). */
+.btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 27px;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: var(--btn-neutral-text);
+    background: var(--btn-neutral-bg);
+    border-radius: var(--radius-sm);
+    transition: background-color 0.12s, filter 0.12s, transform 0.05s;
+}
+.btn svg { width: 13px; height: 13px; }
+.btn:hover { background: var(--btn-neutral-bg-hover); }
+.btn:active { transform: scale(0.95); }
+
+/* Cor só no crítico (acender/apagar). Van despois de .btn-main e .btn
+   para gañar a cascada sobre o fondo neutro. */
+.on   { background: var(--on); color: #fff; }
+.off  { background: var(--off); color: #fff; }
+.on svg, .off svg { color: #fff; }
+.on:hover   { background-color: var(--on);  filter: brightness(1.1); }
+.off:hover  { background-color: var(--off); filter: brightness(1.1); }
+
+/* Ocultos por decisión do usuario (2026-07-27): quedan no código por se se
+   queren reactivar, pero non se mostran na tarxeta do equipo. */
+.btn-individual-oculto { display: none; }
+
+/* ── Modais ─────────────────────────────────────────────────────────── */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: rgba(15,17,23,0.5);
+    justify-content: center;
+    align-items: center;
+}
+.modal-overlay.visible { display: flex; }
+
+.modal-box {
+    background: var(--panel-bg);
+    border-radius: var(--radius-lg);
+    width: 560px;
+    max-width: 92vw;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: var(--shadow-lg);
+    border: 1px solid var(--border-color);
+}
+#ssh-box { width: 780px; background: #090d16; }
+
+/* Modal máis ancho ca o resto: aproveita pantallas grandes (a información
+   de varias tarxetas queda apertada nun ancho fixo de 560px) sen deixar de
+   encoller en pantallas pequenas. Alto tamén axustado a case toda a
+   ventá, para reducir a barra de desprazamento vertical do corpo. */
+.config-box { width: min(1320px, 96vw); max-height: 94vh; }
+.config-box .modal-body { padding: clamp(12px, 1.2vw, 18px); }
+
+/* Layout: grade de tarxetas (pasos 1-5) á esquerda + columna de Módulos
+   fixa á dereita, esta última ocupando toda a altura do corpo do modal.
+   flex-wrap: wrap é defensivo — antes, .config-grid (flex:1; min-width:0)
+   podía acabar con largura computada ≈0 (e por tanto invisible, "tapado"
+   polas tarxetas de Módulos/Idioma) se o webview non lle daba abondo
+   espazo residual; con wrap, se non hai sitio dabondo na mesma fila baixa
+   enteira á súa propia fila en vez de esmagarse. */
+.config-layout {
+    display: flex;
+    flex-wrap: wrap;
+    gap: clamp(10px, 1.2vw, 18px);
+    align-items: stretch;
+}
+.config-grid {
+    flex: 3 1 560px;
+    min-width: 280px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: clamp(10px, 1.2vw, 18px);
+    align-items: start;
+}
+.config-card {
+    background: var(--btn-neutral-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: clamp(12px, 1.1vw, 18px) clamp(14px, 1.3vw, 20px);
+    font-size: clamp(0.82rem, 0.35vw + 0.72rem, 0.95rem);
+}
+.config-card h4 {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: 0 0 10px;
+    font-size: 1em;
+    font-weight: 700;
+    color: var(--text-dark);
+}
+
+/* Columna de Módulos: mesma familia visual có resto de tarxetas pero con
+   un toque de cor propio (derivado de --primary) para destacala sen que
+   supoña un cambio forte respecto das outras tarxetas. Ocupa toda a
+   altura grazas a `align-items: stretch` en .config-layout. */
+.config-modulos {
+    flex: 0 0 clamp(240px, 22vw, 320px);
+    display: flex;
+    flex-direction: column;
+    background: var(--primary-soft);
+    border-color: var(--primary-soft-border);
+}
+.config-modulos #lista-modulos {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    margin: 10px 0;
+}
+/* Idioma da interface, dentro da propia caixa de Módulos (enriba do todo) —
+   separado do resto cunha liña fina, mesmo criterio visual ca outras
+   subseccións do modal. */
+.config-idioma-inline {
+    padding-bottom: 12px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--primary-soft-border);
+}
+.config-idioma-inline .field { margin-bottom: 0; }
+@media (max-width: 900px) {
+    .config-layout { flex-direction: column; }
+    .config-modulos { flex: none; }
+}
+.step-num {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 1.4em;
+    height: 1.4em;
+    border-radius: 50%;
+    background: var(--primary);
+    color: #fff;
+    font-size: 0.72em;
+    font-weight: 700;
+}
+.config-card .modal-hint { font-size: 0.85em; line-height: 1.5; margin: 0 0 12px; }
+.config-card .modal-hint:last-child { margin-bottom: 0; }
+.config-card .modal-hint:empty { display: none; }
+
+/* Parellas etiqueta+campo: substitúen os estilos inline soltos de antes
+   por un ritmo vertical consistente. */
+.config-card .field { margin-bottom: 12px; }
+.config-card .field-label {
+    display: block;
+    font-size: 0.78em;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin-bottom: 5px;
+}
+.config-card input[type="text"],
+.config-card input[type="password"],
+.config-card input[type="number"],
+.config-card select {
+    width: 100%;
+    padding: 8px 10px;
+    font-size: 0.9em;
+    font-family: inherit;
+    color: var(--text-dark);
+    background: var(--panel-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    box-sizing: border-box;
+}
+.config-card input[type="text"]:focus,
+.config-card input[type="password"]:focus,
+.config-card input[type="number"]:focus,
+.config-card select:focus {
+    outline: 2px solid var(--primary);
+    outline-offset: 1px;
+    border-color: var(--primary);
+}
+
+.config-card .btn-main { font-size: 0.85em; }
+.config-btn { display: block; width: 100%; padding: 10px; margin-top: 4px; }
+.config-btn-secondary { padding: 8px; margin-top: 8px; }
+.config-mono { font-family: var(--font-mono); }
+.config-pre { white-space: pre-line; }
+
+.modal-titlebar {
+    background: var(--btn-neutral-bg);
+    border-bottom: 1px solid var(--border-color);
+    padding: 12px 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--text-dark);
+}
+/* Botón de pechar máis discreto (coma en Yang): neutro por defecto, sen o
+   circulo vermello de antes — "pechar" non é unha acción destrutiva. */
+.modal-close {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--btn-neutral-bg);
+    border: none;
+    color: var(--text-muted);
+    border-radius: var(--radius-sm);
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
+    font-size: 13px;
+}
+.modal-close:hover { background: var(--btn-neutral-bg-hover); color: var(--text-dark); }
+
+/* Barra de título coma asa para mover a xanela (ver facerArrastrable en
+   main.js; a clase pona o propio JS, así que un modal sen arrastre non
+   cambia de cursor e non promete algo que non fai). */
+.modal-titlebar.arrastrable { cursor: grab; user-select: none; }
+.modal-titlebar.arrastrable.arrastrando { cursor: grabbing; }
+/* Sen transición no transform: o arrastre debe seguir o punteiro ao instante. */
+.modal-box { transition: none; }
+.modal-body { padding: 18px; overflow-y: auto; flex: 1; color: var(--text-dark); text-align: left; }
+.modal-hint { font-size: 0.8rem; color: var(--text-muted); margin: 4px 0; }
+.sobre-logo { display: block; width: 72px; height: 72px; object-fit: contain; margin: 0 auto 12px; }
+
+#ssh-terminal { padding: 8px; min-height: 380px; }
+
+/* ── Envío de prácticas ─────────────────────────────────────────────── */
+#lista-ficheiros-envio { list-style: none; padding: 0; margin: 0 0 14px; max-height: 140px; overflow-y: auto; }
+#lista-ficheiros-envio li {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 10px; background: var(--btn-neutral-bg); border-radius: 6px;
+    margin-bottom: 4px; font-size: 0.82rem;
+}
+#lista-ficheiros-envio li .fnome { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#lista-ficheiros-envio li button {
+    border: none; background: #fee2e2; color: #ef4444;
+    border-radius: 4px; padding: 2px 7px; cursor: pointer; font-size: 11px;
+}
+
+.destino-box { margin-bottom: 14px; font-size: 0.85rem; }
+.lbl-destino { font-weight: 600; margin-right: 8px; }
+.destino-box label { margin-right: 12px; }
+#seleccion-manual {
+    display: none; margin-top: 8px; columns: 2; column-gap: 8px;
+    font-size: 0.8rem; max-height: 100px; overflow-y: auto;
+}
+#seleccion-manual label { display: block; white-space: nowrap; margin-bottom: 2px; }
+
+.lista-descubertos {
+    margin-top: 10px; max-height: 220px; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 4px;
+}
+.host-fila {
+    display: flex; align-items: center; gap: 8px; font-size: 0.82rem;
+    padding: 4px 2px;
+}
+.host-fila .host-etiqueta { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.host-fila .host-pass {
+    width: 140px; padding: 3px 6px; font-size: 0.8rem;
+}
+
+.progress-container { margin-top: 10px; }
+.progress-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; font-size: 0.78rem; }
+.progress-row .host-lbl { width: 120px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.progress-bar-wrap { flex: 1; height: 6px; background: var(--btn-neutral-bg-hover); border-radius: 99px; overflow: hidden; }
+.progress-bar-fill { height: 100%; border-radius: 99px; transition: width 0.3s; }
+.fill-ok { background: var(--on); }
+.fill-sending { background: var(--send); }
+.fill-erro { background: var(--off); }
+.status-icon { width: 18px; text-align: center; font-size: 13px; }
+
+/* ── Explorador de ficheiros ────────────────────────────────────────── */
+#explorer-list { list-style: none; padding: 0; margin: 0; }
+#explorer-list li {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 12px; border-bottom: 1px solid var(--border-color); font-size: 0.83rem;
+    cursor: pointer;
+}
+#explorer-list li:last-child { border-bottom: none; }
+#explorer-list li:hover { background: var(--btn-neutral-bg); }
+#explorer-list li .file-icon { font-size: 1.1rem; }
+#explorer-list li .file-name { flex: 1; font-weight: 500; word-break: break-all; }
+#explorer-list li .file-size { color: var(--text-muted); white-space: nowrap; }
+.explorer-empty { text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 0.9rem; }
+.explorer-empty .empty-icon { font-size: 2.5rem; margin-bottom: 8px; }

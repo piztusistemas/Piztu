@@ -1,0 +1,7 @@
+---
+- name: Reiniciar todos os equipos da aula
+  hosts: aula
+  become: yes
+  tasks:
+    - name: Executar reinicio
+      shell: /sbin/shutdown -r now

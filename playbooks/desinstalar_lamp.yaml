@@ -1,0 +1,114 @@
+---
+- name: Desinstalar LAMP
+  hosts: localhost
+  connection: local
+  become: yes
+  tasks:
+
+    # Só toca Apache/MariaDB/PHP. NON borra /var/www/html enteiro: File
+    # Browser (independente, ver instalar_filebrowser.yaml) garda os seus
+    # datos en /var/www/html/arquivos e ten o seu propio desinstalador
+    # (desinstalar_filebrowser.yaml) que si limpa o que é seu.
+    - name: 1. Deter e desactivar Apache e MariaDB
+      service:
+        name: "{{ item }}"
+        state: stopped
+        enabled: no
+      # failed_when en vez de ignore_errors: se mariadb nin sequera está
+      # instalado, "Could not find the requested service" é o estado normal
+      # nunha desinstalación, non un erro que mereza saír en vermello.
+      failed_when: false
+      loop:
+        - apache2
+        - mariadb
+
+    - name: 1b. Desatascar paquetes de LAMP quedados a medias
+      # Se unha instalación anterior abortou (p.ex. o preinst de
+      # mariadb-server ao atopar un servidor orfo vivo), quedan paquetes
+      # desempaquetados-sen-configurar e outros con dependencias rotas
+      # (mariadb-plugin-provider-* pide un mariadb-server que nunca chegou a
+      # instalarse). Nese estado "apt-get remove" nin arranca: "E:
+      # Dependencias incumpridas. Probe apt --fix-broken install". E
+      # --fix-broken aquí sería o contrario do que queremos: instalaría
+      # mariadb-server para arranxar as dependencias, xusto no playbook que o
+      # está a eliminar. Así que primeiro téntase pechalos en limpo
+      # (dpkg --configure -a) e o que siga roto púrgase saltando as
+      # dependencias — seguro porque só se tocan paquetes de LAMP, que é
+      # precisamente o que se vai desinstalar.
+      shell:
+        cmd: |
+          set -u
+          dpkg --configure -a --force-confdef --force-confold || true
+          rotos=$(dpkg-query -W -f='${binary:Package}\t${db:Status-Abbrev}\n' 2>/dev/null \
+            | awk -F'\t' '$2 !~ /^ii/ {print $1}' \
+            | grep -E '^(apache2|mariadb-|mysql-|php|libapache2-mod-php)' || true)
+          if [ -z "$rotos" ]; then exit 0; fi
+          echo "PIZTU_DESATASCADOS: $rotos"
+          dpkg --purge --force-depends $rotos || true
+        executable: /bin/bash
+      register: desatasco
+      changed_when: "'PIZTU_DESATASCADOS' in desatasco.stdout"
+
+    - name: 2. Eliminar paquetes de LAMP (PHP, MariaDB, Apache)
+      apt:
+        name:
+          - apache2
+          - mariadb-server
+          - mariadb-client
+          # mariadb-common e mysql-common conteñen os moldes de /etc/mysql
+          # (conf.d/, mariadb.conf.d/, my.cnf). Se non se purgan aquí, unha
+          # reinstalación posterior de LAMP non recrea /etc/mysql/conf.d/ e
+          # mariadbd aborta ("Fatal error in defaults handling"). Ver a
+          # tarefa 2c de instalar_lamp.yaml.
+          - mariadb-common
+          - mysql-common
+          - php
+          - libapache2-mod-php
+          - php-mysql
+          - php-cli
+          - php-curl
+          - php-gd
+          - php-mbstring
+          - php-xml
+          - php-xmlrpc
+          - php-soap
+          - php-intl
+          - php-zip
+          - php-json
+        state: absent
+        purge: yes  # Elimina tamén os ficheiros de configuración
+
+    - name: 2b. Purgar os paquetes PHP versionados e os plugins de MariaDB
+      # A lista de arriba só ten nomes sen versión. O módulo real de Apache e
+      # os seus conffiles (mods-available/phpX.Y.load) veñen no paquete
+      # versionado libapache2-mod-phpX.Y, que NON se purga cos nomes de
+      # arriba. Se queda instalado, dpkg segue crendo que está configurado e
+      # a seguinte instalación de LAMP non recrea eses conffiles → Apache
+      # serve os .php como texto. Os patróns van anclados con ^ para non
+      # tocar paquetes alleos que conteñan "php" no nome.
+      shell:
+        cmd: "apt-get purge -y -q '^php[0-9]' '^libapache2-mod-php' '^mariadb-plugin-' || true"
+        executable: /bin/bash
+      register: purga_php_versionado
+      changed_when: >-
+        purga_php_versionado.stdout is search('Purg|Removing|Desinstalando|Purgando')
+
+    - name: 3. Eliminar dependencias que quedaron sen uso
+      apt:
+        autoremove: yes
+        purge: yes
+
+    # ATENCIÓN: isto borra todas as bases de datos de MariaDB (non só as de
+    # Piztu). Non se toca /var/www/html: pode conter datos de File Browser.
+    - name: 4. Eliminar directorios de configuración e datos de LAMP
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/apache2
+        - /etc/mysql
+        - /var/lib/mysql
+
+    - name: Finalizado
+      debug:
+        msg: "Apache, MariaDB e PHP foron eliminados. Os datos de File Browser (se está instalado) non se tocaron."

@@ -1,0 +1,12 @@
+---
+- name: Configurar iconas da barra de tarefas
+  hosts: aula
+  become: yes
+  tasks:
+    - name: Copiar o script de actualización de iconas de KDE Plasma
+      ansible.builtin.copy:
+        src: fixar_iconas.js
+        dest: /usr/share/plasma/shells/org.kde.plasma.desktop/contents/updates/fixar_iconas.js
+        owner: root
+        group: root
+        mode: '0644'

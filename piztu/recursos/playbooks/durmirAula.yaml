@@ -1,0 +1,7 @@
+---
+- name: Suspender todos os equipos da aula
+  hosts: aula
+  become: yes
+  tasks:
+    - name: Enviar orde de suspensión (sleep)
+      shell: systemctl suspend

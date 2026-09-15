@@ -1,0 +1,13 @@
+[Unit]
+Description=Piztu — historial de sesións (quen usou cada equipo e cando)
+After=network.target
+
+[Service]
+User=usuario
+Group=usuario
+WorkingDirectory=/opt/piztu
+ExecStart=/opt/piztu/historial-daemon
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

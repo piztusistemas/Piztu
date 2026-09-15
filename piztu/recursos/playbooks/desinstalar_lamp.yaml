@@ -1,0 +1,86 @@
+---
+- name: Desinstalar LAMP e File Browser
+  hosts: localhost
+  connection: local
+  become: yes
+  tasks:
+
+    - name: 1. Deter servizos de Apache, MariaDB e File Browser
+      service:
+        name: "{{ item }}"
+        state: stopped
+        enabled: no
+      ignore_errors: yes
+      loop:
+        - apache2
+        - mariadb
+        - filebrowser
+
+    - name: 2. Eliminar paquetes de LAMP (PHP, MariaDB, Apache)
+      apt:
+        name:
+          - apache2
+          - mariadb-server
+          - mariadb-client
+          - php
+          - libapache2-mod-php
+          - php-mysql
+          - php-curl
+          - php-gd
+          - php-mbstring
+          - php-xml
+          - php-xmlrpc
+          - php-soap
+          - php-intl
+          - php-zip
+        state: absent
+        purge: yes  # Isto elimina tamén os ficheiros de configuración
+
+    - name: 3. Eliminar dependencias innecesarias
+      apt:
+        autoremove: yes
+        purge: yes
+
+    - name: 4. Borrar contido de /var/www/html
+      file:
+        path: /var/www/html/
+        state: absent
+
+    - name: 5. Recrear o cartafol /var/www/html baleiro
+      file:
+        path: /var/www/html/
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: '0755'
+
+    - name: 6. Eliminar directorios de configuración restantes
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/apache2
+        - /etc/mysql
+        - /var/lib/mysql  # ATENCIÓN: Isto borra todas as bases de datos
+
+    - name: 7. Eliminar o servizo systemd de File Browser
+      file:
+        path: /etc/systemd/system/filebrowser.service
+        state: absent
+
+    - name: 8. Recargar systemd tras eliminar a unidade
+      command: systemctl daemon-reload
+      changed_when: true
+
+    - name: 9. Eliminar o binario e a configuración de File Browser
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /usr/local/bin/filebrowser
+        - /etc/filebrowser
+        - /var/log/filebrowser.log
+
+    - name: Finalizado
+      debug:
+        msg: "O sistema LAMP e File Browser foron eliminados completamente."

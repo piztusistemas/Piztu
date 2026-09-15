@@ -1,0 +1,95 @@
+---
+- name: Desbloqueo da Aula
+  hosts: aula
+  gather_facts: no
+  become: yes
+  vars:
+    usuario_alumno: "usuario"
+
+  tasks:
+    - name: Activar Rato e Teclado
+      shell: |
+        export DISPLAY=:0
+        USER_ID=$(id -u {{ usuario_alumno }})
+
+        # Mesmo ficheiro de autoridade real que bloqueoTotal.yaml (non
+        # ~/.Xauthority — obsoleto nesta imaxe clonada; ver comentario alí).
+        XAUTH_REAL=$(ps -eo args= -C Xorg | grep -oP '(?<=-auth )\S+' | head -n1)
+        XAUTH_REAL=${XAUTH_REAL:-/home/{{ usuario_alumno }}/.Xauthority}
+
+        if command -v xinput > /dev/null; then
+          for id in $(sudo -u {{ usuario_alumno }} DISPLAY=:0 XAUTHORITY="$XAUTH_REAL" xinput list | grep -v XTEST | grep -oP 'id=\K[0-9]+'); do
+            case "$id" in ''|*[!0-9]*) continue ;; esac
+            if [ "$id" -gt 4 ]; then
+              sudo -u {{ usuario_alumno }} DISPLAY=:0 XAUTHORITY="$XAUTH_REAL" xinput enable "$id" || true
+            fi
+          done
+        fi
+      register: resultado_activar
+      ignore_errors: yes
+
+    - name: DEBUG — amosar erro ao activar rato/teclado
+      debug:
+        msg: "stdout: {{ resultado_activar.stdout }}\nstderr: {{ resultado_activar.stderr }}"
+      when: resultado_activar is failed
+
+    - name: Quitar aviso de bloqueo e mostrar aviso de éxito
+      shell: |
+        export DISPLAY=:0
+        export XAUTHORITY=/home/{{ usuario_alumno }}/.Xauthority
+        USER_ID=$(id -u {{ usuario_alumno }})
+        export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$USER_ID/bus
+
+        # Deter o bucle de aviso persistente (evita que volva lanzar zenity).
+        # O kill polo PID gardado pode fallar (o proceso real de zenity vive
+        # baixo un "sudo -u", e o sinal non sempre chega a través dese salto
+        # de usuario) e deixar o bucle orfo executándose para sempre aínda
+        # que o centinela xa non exista — por iso tamén se mata por nome,
+        # sen depender do PID gardado.
+        if [ -f /tmp/piztu_bloqueo.pid ]; then
+          kill "$(cat /tmp/piztu_bloqueo.pid)" 2>/dev/null || true
+          rm -f /tmp/piztu_bloqueo.pid
+        fi
+        pkill -u {{ usuario_alumno }} -x zenity 2>/dev/null || true
+
+        # Mostrar aviso de desbloqueo (LC_ALL=C.UTF-8: ver comentario en
+        # bloqueoTotal.yaml — sudo -u non conserva LC_CTYPE, e sen isto
+        # calquera tilde no texto fai que zenity rexeite o argumento)
+        sudo -u {{ usuario_alumno }} LC_ALL=C.UTF-8 DISPLAY=:0 DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$USER_ID/bus \
+        zenity --info --title="CONTROL DE AULA" \
+        --text="<span size='xx-large' weight='bold'>EQUIPO DESBLOQUEADO</span>\n\nPodes continuar co teu traballo." \
+        --timeout=5 --no-wrap &
+      register: resultado_aviso
+      ignore_errors: yes
+
+    - name: DEBUG — amosar erro ao quitar aviso
+      debug:
+        msg: "stdout: {{ resultado_aviso.stdout }}\nstderr: {{ resultado_aviso.stderr }}"
+      when: resultado_aviso is failed
+
+    - name: Restaurar Son
+      command: amixer set Master unmute
+      ignore_errors: yes
+
+    # Sempre se executa, independentemente do que estivese bloqueado (báleiran
+    # cadeas baleiras ou inexistentes é inócuo). Localízase por ruta absoluta
+    # (non por PATH — ver bloqueoTotal.yaml) e báleiran nft, iptables e
+    # ip6tables por igual: non se sabe de antemán cal usou o equipo (a
+    # meirande parte agora son nftables puro, ver bloqueoTotal.yaml, pero
+    # equipos máis antigos poden ter usado iptables/ip6tables).
+    - name: Restaurar internet e SSH (baleirar cadeas de bloqueo)
+      shell: |
+        for p in /usr/sbin/nft /sbin/nft /usr/bin/nft /bin/nft; do
+          if [ -x "$p" ]; then "$p" flush chain inet piztu_bloqueo output 2>/dev/null || true; break; fi
+        done
+        for bin in iptables ip6tables; do
+          for p in "/usr/sbin/$bin" "/sbin/$bin" "/usr/bin/$bin" "/bin/$bin"; do
+            if [ -x "$p" ]; then "$p" -F PIZTU_BLOQUEO 2>/dev/null || true; break; fi
+          done
+        done
+      register: resultado_rede_desbloqueo
+      ignore_errors: yes
+
+    - name: DEBUG — amosar resultado da restauración de rede
+      debug:
+        msg: "stdout: {{ resultado_rede_desbloqueo.stdout }}\nstderr: {{ resultado_rede_desbloqueo.stderr }}"

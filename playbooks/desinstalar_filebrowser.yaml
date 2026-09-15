@@ -1,0 +1,50 @@
+---
+- name: Desinstalar File Browser
+  hosts: localhost
+  connection: local
+  become: yes
+  vars:
+    filebrowser_root: /var/www/html/arquivos
+
+  tasks:
+    - name: 1. Deter e desactivar o servizo filebrowser
+      service:
+        name: filebrowser
+        state: stopped
+        enabled: no
+      ignore_errors: yes
+
+    - name: 2. Eliminar o servizo systemd de File Browser
+      file:
+        path: /etc/systemd/system/filebrowser.service
+        state: absent
+
+    - name: 3. Recargar systemd tras eliminar a unidade
+      command: systemctl daemon-reload
+      changed_when: true
+
+    - name: 4. Eliminar o binario e a configuración de File Browser
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /usr/local/bin/filebrowser
+        - /etc/filebrowser
+        - /var/log/filebrowser.log
+
+    # Borra tamén {{ filebrowser_root }} (por defecto /var/www/html/arquivos):
+    # é onde File Browser garda TODOS os datos do aplicativo — ficheiros e
+    # traballos do alumnado, certificados persoais, o historial de sesións e a
+    # carpeta compartida dixitalizacion/ (alumnos.json, materias, tarefas,
+    # prácticas, mensaxes…). A desinstalación pídese para deixar o servidor
+    # limpo, así que non se conserva nada.
+    - name: 5. Eliminar todos os datos de File Browser ({{ filebrowser_root }})
+      file:
+        path: "{{ filebrowser_root }}"
+        state: absent
+
+    - name: Finalizado
+      debug:
+        msg: >
+          File Browser e todos os seus datos ({{ filebrowser_root }}) foron
+          eliminados por completo.

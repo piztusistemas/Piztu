@@ -1,0 +1,137 @@
+# Piztu installer language file — ENGLISH
+# Format: key = value   (use \n for line breaks; # for comments)
+# %s and %d are replaced by values in the program (paths, number of machines...)
+
+# ── Window and permissions ─────────────────────────────────────────
+win.title = Piztu — Installer
+permiso.title = Piztu — Permission required
+permiso.texto = The installer requires administrator permissions.\n\nRun it in the terminal with:\n\n    sudo ./build/bin/piztu-installer
+permiso.pechar = Close
+
+# ── Navigation ─────────────────────────────────────────────────────
+nav.anterior = ← Previous
+nav.seguinte = Next →
+nav.pechar = Close
+nav.finalizar = Finish
+nav.idioma = Language
+nav.progreso = Step %d of %d
+
+# ── Step names (sidebar) ───────────────────────────────────────────
+paso.benvida = 🏠  Welcome
+paso.instalacion = 1  Installation
+paso.lamp = 2  LAMP
+paso.filebrowser = 3  File Browser
+paso.completado = ✅  Done
+paso.desinstalar = 🗑️  Uninstall
+
+app.info = Piztu Sistemas\nMartín Pardiñas\npiztu@omeu.gal\npiztu.org
+app.licenza = AGPLv3 License
+
+# ── Step 0: Welcome ────────────────────────────────────────────────
+benvida.titulo = Welcome to the Piztu installer
+benvida.desc = This wizard will guide you through installing Piztu, the computer classroom management system. You can close and continue later.
+benvida.nomes.titulo = 🏷️  Machine names
+benvida.nomes.sub = Rename the server and clients before installing
+benvida.nomes.corpo = Each machine must have a unique, sequential name:\n  • Server:  tux0\n  • Clients:  tux01, tux02 … tux22  (depending on the number of machines)\n\nOn each machine, edit both files and reboot:\n  sudo nano /etc/hostname\n  sudo nano /etc/hosts\n\nSet the same name in both files and reboot the machine.\n\n(This scheme is just a suggestion: from Piztu you can also add machines with arbitrary names.)
+benvida.sudo.titulo = 🔑  Sudo permissions (server and clients)
+benvida.sudo.sub = EVERY machine needs passwordless sudo
+benvida.sudo.corpo = Same requirement on the server and on the clients. On each machine, run:\n  sudo visudo\n\nAnd add at the end:\n  user ALL=(ALL) NOPASSWD:ALL\n\n(replace 'user' with the real user name)\n\n• On the SERVER: the user who opens Piztu. It is needed to install and manage salt-master.\n• On the CLIENTS: the SSH user Ansible/Salt connects with.
+benvida.ssh.titulo = 🔐  SSH on the client machines
+benvida.ssh.sub = openssh-server is mandatory
+benvida.ssh.corpo = Every client machine must have the SSH server installed and active. Install and configure it like this:\n\n  sudo apt update\n  sudo apt install openssh-server\n  nano /etc/ssh/sshd_config\n\nUncomment and edit these lines:\n  Port 22\n  PermitRootLogin yes\n  PubkeyAuthentication yes\n  PasswordAuthentication yes
+benvida.aviso = ⚠️  To install in /opt/piztu and create shortcuts, run the installer with sudo.
+
+# ── Step 1: Installation ───────────────────────────────────────────
+inst.card = Step 1 — Installation
+inst.desc = This step:\n• Copies the Piztu files to %s\n• Installs the system dependencies (Ansible, SSH, Wake-on-LAN, Salt…)\n• Enables salt-master on this server\n• Sets script permissions
+inst.out.inicial = Press the button to start the installation...
+inst.btn = 🚀 Install Piztu
+inst.iniciando = Starting installation...\n
+inst.erro = \n❌ Error: %s
+inst.ok = \n✅ Installation complete! Continue to the next step.
+inst.log.extraendo = 📁 Extracting files to %s…
+inst.log.extraidos = ✅ Files extracted\n
+inst.log.apt = 🔄 Updating package list…
+inst.log.aptfail = ⚠️  apt-get update failed, continuing anyway…
+inst.log.paquetes = 📦 Installing apt packages…
+inst.log.paquetesok = ✅ Packages installed\n
+inst.log.paquetes_individual = ⚠️ Batch install failed; installing package by package…
+inst.log.paquete_fallou = ⚠️ Could not install: %s (skipped)
+inst.log.salt = 🧂 Setting up salt-master on this server…
+inst.log.saltok = ✅ salt-master active\n
+inst.log.saltfail = ⚠️  Could not enable salt-master: %s
+inst.log.permisos = 🔧 Setting script permissions…
+inst.log.permisosok = ✅ Permissions set
+
+# ── Step 2: LAMP (optional) ──────────────────────────────────────────
+lamp.card = Step 2 — LAMP
+lamp.desc = Installs Apache, MariaDB and PHP on this server. Optional: skip this step if you already have a LAMP server installed.
+lamp.btn = 🌐 Install LAMP
+lamp.form.dbpass = MySQL root password
+lamp.faltan = ❌ Enter the MySQL password.
+lamp.errovars = ❌ Error creating temp vars file: %s
+lamp.erroplaybook = ❌ Playbook not found: %s
+lamp.log.iniciando = 🌐 Installing LAMP…\n
+lamp.erro = \n❌ Error: %s
+lamp.ok = \n✅ LAMP installed! Apache active on port 80.
+
+# ── Step 3: File Browser (optional) ──────────────────────────────────
+filebrowser.card = Step 3 — File Browser
+filebrowser.desc = Installs File Browser on this server, so students can upload and download files from the browser. Requires a web server already running (installed in the previous step or beforehand). Optional; you can skip this step.
+filebrowser.btn = 📁 Install File Browser
+filebrowser.doususuarios.titulo = ✅ You're about to create TWO users. They are NOT the same.
+filebrowser.doususuarios.corpo = 🔑 admin (below) → the File Browser SERVER account. Holds EVERY student's work.\n\n🧑‍🏫 director (inside Tao) → YOUR personal account to manage Tao (subjects, students). Created later, the first time you open Tao, by typing "director" as the username.\n\nThey can't be merged: they live in different places and do different things. Typing "admin" inside Tao, or "director" on the server, will NOT work.\n\nRule of thumb: "admin" is only typed HERE. "director" is only typed INSIDE Tao.
+filebrowser.doususuarios.check = I've read this and understand that "admin" (File Browser server) and "director" (Tao management) are TWO separate, independent users — I need to create BOTH.
+filebrowser.form.fbuser = File Browser admin username
+filebrowser.form.fbpass = File Browser password (min. 12 characters)
+filebrowser.faltan = ❌ Enter the File Browser username and password.
+filebrowser.pass.curto = ❌ The File Browser password must be at least 12 characters long.
+filebrowser.user.invalido = ❌ The username may only contain letters, digits, dot, dash or underscore (for example "admin"). This looks like a password: check you haven't swapped the two fields.
+filebrowser.errovars = ❌ Error creating temp vars file: %s
+filebrowser.erroplaybook = ❌ Playbook not found: %s
+filebrowser.log.iniciando = 📁 Installing File Browser…\n
+filebrowser.erro = \n❌ Error: %s
+filebrowser.ok = \n✅ File Browser installed! Access it at http://localhost:8080 with user "%s".
+filebrowser.log.grupo = ⚠️  "%s" was added to the www-data group (to read Tao sessions). Log out and back in (or reboot) for this to take effect.
+filebrowser.errofilebrowsercfg = ⚠️  Could not save File Browser credentials to config.yaml: %s
+filebrowser.historial.ok = ✅ Session history service (piztu-historial) installed and enabled.
+filebrowser.historial.erro = ⚠️  Could not install the session history service: %s
+
+# ── Step 4: Done ───────────────────────────────────────────────────
+fin.card = ✅  Piztu installed successfully!
+fin.desc = Piztu was installed in %s.\n\nTo set up the classroom (add machines, distribute the SSH key and generate the inventory) open Piztu and use its own setup wizard.\n\nCreate the shortcuts to access Piztu from the desktop:
+fin.btn = 🖥️  Create shortcuts
+fin.erro = ❌ Error: %s
+fin.creados = ✅ Shortcuts created:\n• Applications menu (Education → Piztu)\n• Desktop (Piztu)
+
+# ── Danger zone: uninstall ───────────────────────────────────────────
+desinst.titulo = ⚠️  Danger zone
+desinst.intro = These actions undo the installation and cannot be reverted. Each one is independent: you can uninstall just File Browser or just LAMP without touching the rest of Piztu.
+desinst.confirmar.label = Type %s to confirm
+
+desinst.piztu.card = 🗑️  Uninstall Piztu completely
+desinst.piztu.desc = Removes /opt/piztu (configuration, position database, history…), salt-master and its keys, the session history service, the sudoers rule and the configured SSH key, the local Tao data (~/.config/dixitalizacion), and the shortcuts and icon. Does NOT touch LAMP or File Browser: uninstall them separately if you also want to remove them.
+desinst.piztu.palabra = UNINSTALL
+desinst.piztu.btn = 🗑️  Uninstall Piztu completely
+desinst.piztu.confirm = This will remove Piztu completely from this server, including the position database and history. It cannot be undone. Continue?
+desinst.piztu.erro = \n❌ Error: %s
+desinst.piztu.ok = \n✅ Piztu fully uninstalled.
+
+desinst.fb.card = 📁 Uninstall File Browser
+desinst.fb.desc = Removes the File Browser service, binary and configuration, ALL server data (/var/www/html/arquivos: student work and certificates, session history, subjects, assignments, practicals, messages…) and this machine's local Tao data (~/.config/dixitalizacion). Nothing is kept.
+desinst.fb.btn = 📁 Uninstall File Browser
+desinst.fb.confirm = This will uninstall File Browser and DELETE all its data: student work and certificates (/var/www/html/arquivos), the session history, subjects, assignments and practicals, and this machine's local Tao data (~/.config/dixitalizacion). This CANNOT be undone. Continue?
+desinst.fb.erroplaybook = ❌ Playbook not found: %s
+desinst.fb.log.iniciando = 📁 Uninstalling File Browser…\n
+desinst.fb.erro = \n❌ Error: %s
+desinst.fb.datoslocais = 🧭 Removing local Tao data (%s)…
+desinst.fb.ok = \n✅ File Browser uninstalled.
+
+desinst.lamp.card = 🌐 Uninstall LAMP
+desinst.lamp.desc = Removes Apache, MariaDB and PHP from this server, including all MySQL/MariaDB databases. Does not touch File Browser or its data.
+desinst.lamp.btn = 🌐 Uninstall LAMP
+desinst.lamp.confirm = This will uninstall Apache, MariaDB and PHP, including ALL databases. It cannot be undone. Continue?
+desinst.lamp.erroplaybook = ❌ Playbook not found: %s
+desinst.lamp.log.iniciando = 🌐 Uninstalling LAMP…\n
+desinst.lamp.erro = \n❌ Error: %s
+desinst.lamp.ok = \n✅ LAMP uninstalled.

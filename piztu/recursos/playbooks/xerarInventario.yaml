@@ -1,0 +1,33 @@
+---
+- name: Xerar inventario con MACs automaticamente
+  hosts: aula
+  remote_user: usuario
+  become: yes
+  gather_facts: yes
+
+  tasks:
+    - name: Engadir MAC a cada equipo no ficheiro hosts
+      delegate_to: localhost
+      lineinfile:
+        path: /opt/piztu/hosts
+        regexp: "^{{ inventory_hostname }}(.*?)$"
+        line: "{{ inventory_hostname }} mac={{ ansible_default_ipv4.macaddress }}"
+        backrefs: yes
+
+    - name: Confirmar que a MAC foi engadida
+      debug:
+        msg: "{{ inventory_hostname }}: {{ ansible_default_ipv4.macaddress }}"
+
+  post_tasks:
+    - name: Mostrar contido final do ficheiro hosts
+      run_once: true
+      delegate_to: localhost
+      command: cat /opt/piztu/hosts
+      register: hosts_final
+      changed_when: false
+
+    - name: Inventario xerado
+      run_once: true
+      delegate_to: localhost
+      debug:
+        msg: "INVENTARIO XERADO CORRECTAMENTE en /opt/piztu/hosts"

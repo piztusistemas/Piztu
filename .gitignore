@@ -1,0 +1,15 @@
+# hosts é o inventario Ansible desta instalación en concreto — leva
+# hostnames e credenciais reais do centro (ansible_password, etc.), xeradas
+# por xerar_inventario.sh ou escritas á man. Nunca debe publicarse.
+hosts
+hosts.old
+hosts.bak*
+
+# Copias de seguranza soltas de binarios (ex.: piztu.bak-*, feitas á man
+# durante o desenvolvemento) — non son fonte, só clutter.
+*.bak-*
+
+# Dependencias de node (rexenerables con "npm install"; nunca se deben
+# publicar).
+node_modules/
+*.DS_Store

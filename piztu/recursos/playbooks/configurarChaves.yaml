@@ -1,0 +1,10 @@
+---
+- name: Configurar acceso por chave SSH para o usuario
+  hosts: aula
+  remote_user: root  # <--- ESTA É A CLAVE: Entramos como o xefe
+  tasks:
+    - name: Copiar a chave pública ao ficheiro authorized_keys do usuario
+      authorized_key:
+        user: usuario # <--- Pero deixamos a chave no cartafol do alumno
+        state: present
+        key: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
