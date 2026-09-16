@@ -61,7 +61,26 @@ files:
 	@cp ../piztu/build/bin/tao-helper files/tao-helper
 	@cp ../piztu/build/bin/historial-daemon files/historial-daemon
 	@cp ../systemd/piztu-historial.service files/systemd/piztu-historial.service
-	@cp ../config.yaml ../hosts ../ansible.cfg ../logo.png files/
+	@cp ../config.yaml ../ansible.cfg ../logo.png files/
+	@# ../hosts NON se empaqueta NUNCA. É o inventario real de quen compila:
+	@# hostnames do centro e ansible_user/ansible_password en claro. Como files/
+	@# vai embebido no binario (//go:embed files en install.go), copialo aquí
+	@# metía ese contrasinal dentro de cada instalador distribuído, recuperable
+	@# cun simple `strings`. En lugar diso xérase un modelo baleiro: o inventario
+	@# real créao despois cada centro en ⚙ Aula → Xerar inventario, e extractFiles
+	@# conserva o que xa houbese. Xérase aquí (e non se copia un ficheiro modelo)
+	@# para que non exista ningunha ruta pola que o hosts real chegue a files/.
+	@printf '%s\n' \
+		'# Inventario de Ansible. Este ficheiro é un MODELO baleiro: o inventario' \
+		'# real xérao Piztu en ⚙ Aula → Grupo → Xerar inventario, ou o script' \
+		'# xerar_inventario.sh. Nunca se empaqueta o do centro que compila.' \
+		'[aula]' \
+		'# equipo01.local' \
+		'' \
+		'[aula:vars]' \
+		'ansible_user=' \
+		'ansible_password=' \
+		'ansible_connection=ssh' > files/hosts
 	@# O LICENSE acompaña ao binario instalado: a AGPL pídeo e o diálogo
 	@# «Sobre Piztu» remata dicindo "Texto completo no ficheiro LICENSE",
 	@# que ata agora non chegaba a /opt/piztu.

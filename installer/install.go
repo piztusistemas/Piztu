@@ -418,10 +418,15 @@ func extractFiles(log func(string)) error {
 		if d.IsDir() {
 			return os.MkdirAll(target, 0755)
 		}
-		// Conservar config.yaml existente (ten ssh_key_file e axustes do usuario)
-		if rel == "config.yaml" {
+		// Conservar o que pertence á INSTALACIÓN e non ao paquete:
+		//   config.yaml — ten ssh_key_file e os axustes do usuario.
+		//   hosts       — é o inventario real do centro; o paquete só trae un
+		//                 modelo baleiro (ver o target `files` do Makefile), así
+		//                 que reinstalar por riba non lle debe deixar a aula sen
+		//                 inventario.
+		if rel == "config.yaml" || rel == "hosts" {
 			if _, err := os.Stat(target); err == nil {
-				log("  config.yaml (conservado, xa existe)")
+				log("  " + rel + " (conservado, xa existe)")
 				return nil
 			}
 		}
