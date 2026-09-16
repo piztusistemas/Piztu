@@ -37,6 +37,23 @@ type Eventos struct {
 	OnNotificacion func(msg, tipo string)
 }
 
+// Modo di ata onde chega o monitor cando está a escoitar.
+//
+// A distinción existe porque o monitor non só mide: cando o nivel persiste por
+// riba do limiar abre unha ventá de aviso en TODOS os equipos da aula, bloquéaos
+// e desbloquéaos el só. Iso ten que ser sempre unha decisión explícita do
+// profesorado (manter premida a icona do micrófono 3s), nunca algo que pase por
+// arrincar Piztu. Mentres non se arme, o micrófono pode alimentar o vúmetro sen
+// tocar un só equipo.
+type Modo int
+
+const (
+	// SoEscoita mide e alimenta o vúmetro, pero NON envía nada aos clientes.
+	SoEscoita Modo = iota
+	// ConAccions é o monitor completo: aviso, bloqueo e desbloqueo automáticos.
+	ConAccions
+)
+
 // Monitor captura audio, calcula niveis e dispara aviso/bloqueo/desbloqueo.
 // Sempre usa o motor Ansible: ruido.py orixinal nunca pasaba pola
 // abstracción de motor.Get, chamaba "ansible-playbook" directamente.
@@ -48,6 +65,7 @@ type Monitor struct {
 
 	mu       sync.Mutex
 	activo   bool
+	modo     Modo
 	cancelar context.CancelFunc
 }
 
@@ -59,10 +77,12 @@ func Novo(cfg *config.Config, umbral func() int, ev Eventos) *Monitor {
 }
 
 // Iniciar arranca a captura e o bucle principal nunha goroutine, se non
-// están xa activos.
-func (mon *Monitor) Iniciar() {
+// están xa activos. Se xa estaba escoitando en SoEscoita e agora se pide
+// ConAccions, ármase sen reiniciar a captura (e ao revés, desármase).
+func (mon *Monitor) Iniciar(modo Modo) {
 	mon.mu.Lock()
 	defer mon.mu.Unlock()
+	mon.modo = modo
 	if mon.activo {
 		return
 	}
@@ -72,10 +92,12 @@ func (mon *Monitor) Iniciar() {
 	go mon.bucle(ctx)
 }
 
-// Detener para a captura e o bucle principal.
+// Detener para a captura e o bucle principal, e desarma o monitor: se despois
+// volve arrincar, faino sen accións mentres ninguén as pida explicitamente.
 func (mon *Monitor) Detener() {
 	mon.mu.Lock()
 	defer mon.mu.Unlock()
+	mon.modo = SoEscoita
 	if !mon.activo {
 		return
 	}
@@ -87,6 +109,15 @@ func (mon *Monitor) Activo() bool {
 	mon.mu.Lock()
 	defer mon.mu.Unlock()
 	return mon.activo
+}
+
+// Armado di se o monitor pode actuar sobre os equipos da aula. É o que
+// distingue "o micrófono está a escoitar" de "o control de ruído está activo":
+// a icona do micrófono acéndese con isto, non con Activo.
+func (mon *Monitor) Armado() bool {
+	mon.mu.Lock()
+	defer mon.mu.Unlock()
+	return mon.activo && mon.modo == ConAccions
 }
 
 func (mon *Monitor) notificar(msg, tipo string) {
@@ -238,8 +269,12 @@ func (mon *Monitor) bucle(ctx context.Context) {
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 
-	println(fmt.Sprintf("--- 🎙️ Control de Ruído Activo (Media %ds · bloqueo tras %ds) ---",
-		r.SegPromedio, r.SegBloqueo))
+	if mon.Armado() {
+		println(fmt.Sprintf("--- 🎙️ Control de Ruído ARMADO (Media %ds · bloqueo tras %ds) ---",
+			r.SegPromedio, r.SegBloqueo))
+	} else {
+		println("--- 🎙️ Micrófono a escoitar SÓ PARA O VÚMETRO (sen accións na aula) ---")
+	}
 
 	for {
 		select {
@@ -282,6 +317,15 @@ func (mon *Monitor) bucle(ctx context.Context) {
 
 		mon.vumetro(Estado{Nivel: nivelInstan, NivelMedio: nivelMedio, Estado: estadoAlerta})
 
+		// Sen armar, o monitor remata aquí: mide e pinta o vúmetro, pero non
+		// abre avisos nin bloquea nada. Tamén se reinicia a alerta, para que
+		// desarmar no medio dunha escalada non deixe a conta a medias e dispare
+		// en canto se volva armar.
+		if !mon.armado() {
+			estadoAlerta = 0
+			continue
+		}
+
 		switch {
 		case !enWarmup && nivelMedio > umbral:
 			switch estadoAlerta {
@@ -319,8 +363,19 @@ func (mon *Monitor) todosHosts() []string {
 	return inventory.GetEquipos(mon.cfg.HostsFile)
 }
 
+// armado é a comprobación interna, a mesma que expón Armado. Compróbase tamén
+// en cada disparo e non só no bucle: verificarEReintentarDesbloqueo corre nunha
+// goroutine propia que pode sobrevivir a que se desarme o monitor, e ningunha
+// acción súa debe chegar aos equipos despois diso.
+func (mon *Monitor) armado() bool {
+	return mon.Armado()
+}
+
 // dispararAsync lanza a acción sen agardar (← Popen sen .wait()).
 func (mon *Monitor) dispararAsync(nomeLogico string) {
+	if !mon.armado() {
+		return
+	}
 	hosts := mon.todosHosts()
 	if len(hosts) == 0 {
 		return
@@ -331,6 +386,9 @@ func (mon *Monitor) dispararAsync(nomeLogico string) {
 // dispararSync lanza a acción e agarda a que remate en todos os hosts
 // (← Popen + .wait()).
 func (mon *Monitor) dispararSync(nomeLogico string) {
+	if !mon.armado() {
+		return
+	}
 	hosts := mon.todosHosts()
 	if len(hosts) == 0 {
 		return
@@ -343,6 +401,9 @@ func (mon *Monitor) dispararSync(nomeLogico string) {
 func (mon *Monitor) verificarEReintentarDesbloqueo(ctx context.Context) {
 	r := mon.cfg.Ruido
 	if !r.VerificarDesbloqueo {
+		return
+	}
+	if !mon.armado() {
 		return
 	}
 
@@ -429,6 +490,9 @@ func esperarOuCancelar(ctx context.Context, d time.Duration) bool {
 }
 
 func (mon *Monitor) desbloquearHostIndividual(host string) bool {
+	if !mon.armado() {
+		return false
+	}
 	exito := false
 	err := mon.m.ExecutarAccion("liberar", []string{host}, motor.Callbacks{
 		OnOk: func(_ string, _ string) { exito = true },

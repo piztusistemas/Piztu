@@ -164,7 +164,7 @@ modulos:
   indice_url: "https://piztu.org/modulos/modulos.json"
   catalogo_local:
     "*":
-      github_repo: "piztutao/modulos"
+      github_repo: "piztusistemas/modulos"
 
 # ── Xesta (asistente de IA) ───────────────────────────────────────────────────
 # Xesta é unha app independente (fóra deste proceso) que usa unha IA para xerar

@@ -10,7 +10,7 @@ import (
 // dado un listado cru da raíz dun repo de GitHub (tal cal o devolve a súa
 // API de contidos), agrupa por id e queda coa versión máis nova de cada un,
 // sen que ningún id estivese declarado de antemán. Caso real: o repo
-// piztutao/modulos ten varias versións de tao e xesta convivindo á vez.
+// piztusistemas/modulos ten varias versións de tao e xesta convivindo á vez.
 func TestTodosOsZipsPorID(t *testing.T) {
 	entradas := []ghContentEntry{
 		{Name: "LICENSE", DownloadURL: "https://x/LICENSE"},

@@ -298,7 +298,10 @@ func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOpt
 		a.iniciarTao()
 	}
 	if a.moduloActivo(modulos.Ruido) && a.ruidoAutoarranque() {
-		a.ruido.Iniciar()
+		// SoEscoita: ao abrir Piztu o micrófono pode alimentar o vúmetro, pero
+		// o control de ruído queda DESARMADO. Armalo é sempre un xesto
+		// explícito do profesorado (IniciarRuido ← 3s na icona do micrófono).
+		a.ruido.Iniciar(ruido.SoEscoita)
 	}
 	return nil
 }
@@ -546,22 +549,26 @@ func errModuloInactivo(id string) error {
 	return fmt.Errorf("o módulo %q está desactivado (⚙ Aula → Módulos)", id)
 }
 
-// ruidoAutoarranque di se o monitor de ruído debe poñerse a escoitar ao abrir
-// piztu.
+// ruidoAutoarranque di se o micrófono debe poñerse a ESCOITAR ao abrir piztu.
+// Escoitar só enche o vúmetro: as accións sobre a aula van aparte (ver
+// ruido.Modo), así que isto nunca fai que se bloquee nin se avise a ninguén.
 //
-// OLLO: ata a versión con módulos, o monitor NON arrancaba só a propósito —pode
-// bloquear equipos automaticamente ao superarse o limiar, e considerábase que
-// tiña que ser sempre unha decisión explícita do profesor. O comportamento
-// cambiouse por petición expresa, pero deixándoo como axuste persistente: quen
-// prefira o de antes pode apagalo e queda apagado.
+// Historia deste axuste, que convén non repetir: durante un tempo valeu "1" por
+// defecto E arrincaba o monitor completo. Como a clave nin sequera existía na
+// táboa `axuste` (non hai interface que a escriba), o resultado era que o
+// control de ruído se armaba só ao abrir Piztu, coa icona do micrófono apagada,
+// e a aula bloqueábase e desbloqueábase soa cada poucos minutos —os avisos
+// "EQUIPO DESBLOQUEADO" que ninguén pedira. Agora son dúas cousas distintas:
+// este axuste (por defecto "0", nada de micrófono) e armar, que só pode facelo
+// o profesorado mantendo premida a icona 3s.
 func (a *App) ruidoAutoarranque() bool {
 	if a.ruido == nil {
 		return false
 	}
 	if a.store == nil {
-		return true
+		return false
 	}
-	return a.store.LerAxuste("ruido_autoarranque", "1") == "1"
+	return a.store.LerAxuste("ruido_autoarranque", "0") == "1"
 }
 
 // ModuloInfo describe un módulo para a ventá de configuración.
@@ -853,7 +860,7 @@ func (a *App) sementarModulos() {
 // ningún, só mantén ao día os que xa hai. O estado activo/inactivo consérvase
 // (vive á parte, ver modulos.Actualizar). Chámase en fondo ao arrincar, xusto
 // despois de refrescarCatalogo — así o profesor non ten que premer "Actualizar"
-// módulo por módulo cada vez que sae unha versión nova en piztutao/modulos.
+// módulo por módulo cada vez que sae unha versión nova en piztusistemas/modulos.
 func (a *App) actualizarModulosAoDia() {
 	catalogo := a.catalogoCache()
 	if len(catalogo) == 0 {
@@ -1026,7 +1033,7 @@ func (a *App) SetModulo(id string, activo bool) error {
 	case modulos.Ruido:
 		if activo {
 			if a.ruidoAutoarranque() {
-				a.ruido.Iniciar()
+				a.ruido.Iniciar(ruido.SoEscoita) // acender o módulo non arma nada
 			}
 		} else if a.ruido != nil {
 			a.ruido.Detener()
@@ -1450,12 +1457,16 @@ func (a *App) lanzarAplicacion(id, ruta, contexto string) error {
 
 // IniciarRuido/DetenerRuido expóñense ao frontend, ligados á casilla "Activo"
 // (← chk_ruido/toggle_monitor de main.py).
+// IniciarRuido ARMA o control de ruído: a partir de aquí o monitor pode abrir
+// avisos e bloquear/desbloquear a aula el só. É o único camiño que arma, e
+// chámase desde un único sitio: manter premida 3s a icona do micrófono
+// (main.js). Non o chames desde ningún arranque automático.
 func (a *App) IniciarRuido() {
 	if !a.moduloActivo(modulos.Ruido) {
 		return
 	}
 	if a.ruido != nil {
-		a.ruido.Iniciar()
+		a.ruido.Iniciar(ruido.ConAccions)
 	}
 }
 
@@ -1463,6 +1474,14 @@ func (a *App) DetenerRuido() {
 	if a.ruido != nil {
 		a.ruido.Detener()
 	}
+}
+
+// RuidoArmado di se o control de ruído está armado agora mesmo. O frontend
+// consúltao ao arrincar para pintar a icona do micrófono conforme ao estado
+// real do backend: antes a icona nacía sempre apagada aínda que o monitor
+// estivese a traballar, e era imposible saber desde a aula que estaba activo.
+func (a *App) RuidoArmado() bool {
+	return a.ruido != nil && a.ruido.Armado()
 }
 
 func dirsIdiomas(cfg *config.Config) []string {

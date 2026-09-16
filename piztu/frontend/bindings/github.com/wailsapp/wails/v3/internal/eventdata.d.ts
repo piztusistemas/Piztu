@@ -18,6 +18,7 @@ declare module "@wailsio/runtime" {
             "actualizacion_piztu_cambiada": actualizacion$0.Estado;
             "ansible_setup_completo": { [_ in string]?: any };
             "ansible_setup_log": { [_ in string]?: any };
+            "aula_salt_master_resolto": { [_ in string]?: any };
             "clave_completo": { [_ in string]?: any };
             "clave_hosts_completo": { [_ in string]?: any };
             "clave_hosts_log": { [_ in string]?: any };

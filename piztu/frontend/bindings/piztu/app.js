@@ -67,7 +67,7 @@ export function AbrirTao() {
 /**
  * AccionsModulos devolve as accións dos módulos activos que o MOTOR ACTUAL pode
  * executar. Unha acción que só trae, por exemplo, un .sls non se ofrece estando
- * en Nativo: mellor non pintar o botón que pintalo e que falle ao premelo.
+ * en SSH: mellor non pintar o botón que pintalo e que falle ao premelo.
  * @returns {$CancellablePromise<$models.AccionInfo[]>}
  */
 export function AccionsModulos() {
@@ -126,12 +126,17 @@ export function ComprobarActualizacionsModulos() {
 
 /**
  * ComprobarSalt executa o diagnóstico do motor Salt e devolve a lista de
- * comprobacións para pintar en ⚙ Aula. Non modifica nada nin pide contrasinal.
+ * comprobacións para pintar en ⚙ Aula. Non modifica nada nin pide contrasinal:
+ * é a resposta a "non me funciona e descoñezo o motivo", que ata agora só se
+ * podía responder executando ordes de `salt` á man nunha terminal.
+ * Devolve liñas xa formatadas, non as Comprobacion en cru, para que o binding
+ * non teña que arrastrar un tipo novo ata o frontend: a estrutura (e as súas
+ * probas) queda en saltsetup.Diagnostico, que é onde importa.
  * @returns {$CancellablePromise<string[]>}
  */
 export function ComprobarSalt() {
     return $Call.ByID(3241176382).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType20($result);
+        return $$createType3($result);
     }));
 }
 
@@ -285,7 +290,7 @@ export function GardarUmbral(v) {
  */
 export function GetActualizacionPiztu() {
     return $Call.ByID(1176469992).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType3($result);
+        return $$createType4($result);
     }));
 }
 
@@ -296,7 +301,7 @@ export function GetActualizacionPiztu() {
  */
 export function GetAulaConfig() {
     return $Call.ByID(2861853712).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType4($result);
+        return $$createType5($result);
     }));
 }
 
@@ -306,7 +311,7 @@ export function GetAulaConfig() {
  */
 export function GetEquipos() {
     return $Call.ByID(380500691).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType6($result);
+        return $$createType7($result);
     }));
 }
 
@@ -318,7 +323,7 @@ export function GetEquipos() {
  */
 export function GetEstadoTao() {
     return $Call.ByID(3600699887).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType8($result);
+        return $$createType9($result);
     }));
 }
 
@@ -336,7 +341,7 @@ export function GetMotor() {
  */
 export function GetOpcionsBloqueo() {
     return $Call.ByID(450801743).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType9($result);
+        return $$createType10($result);
     }));
 }
 
@@ -348,7 +353,7 @@ export function GetOpcionsBloqueo() {
  */
 export function GetPublicacions() {
     return $Call.ByID(290261777).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType10($result);
+        return $$createType11($result);
     }));
 }
 
@@ -375,13 +380,17 @@ export function Idioma() {
  */
 export function IdiomasDisponibles() {
     return $Call.ByID(1592057939).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType12($result);
+        return $$createType13($result);
     }));
 }
 
 /**
  * IniciarRuido/DetenerRuido expóñense ao frontend, ligados á casilla "Activo"
  * (← chk_ruido/toggle_monitor de main.py).
+ * IniciarRuido ARMA o control de ruído: a partir de aquí o monitor pode abrir
+ * avisos e bloquear/desbloquear a aula el só. É o único camiño que arma, e
+ * chámase desde un único sitio: manter premida 3s a icona do micrófono
+ * (main.js). Non o chames desde ningún arranque automático.
  * @returns {$CancellablePromise<void>}
  */
 export function IniciarRuido() {
@@ -453,7 +462,7 @@ export function LimparPracticas(destinos) {
  */
 export function ListarFicheiros(host) {
     return $Call.ByID(3269305554, host).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType13($result);
+        return $$createType14($result);
     }));
 }
 
@@ -464,7 +473,7 @@ export function ListarFicheiros(host) {
  */
 export function ModulosDispo() {
     return $Call.ByID(1629645069).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType15($result);
+        return $$createType16($result);
     }));
 }
 
@@ -486,7 +495,7 @@ export function MotorBase() {
  */
 export function MotoresDispo() {
     return $Call.ByID(660477615).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType17($result);
+        return $$createType18($result);
     }));
 }
 
@@ -496,7 +505,7 @@ export function MotoresDispo() {
  */
 export function PanelModulo(id) {
     return $Call.ByID(19474263, id).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType19($result);
+        return $$createType20($result);
     }));
 }
 
@@ -507,6 +516,17 @@ export function PanelModulo(id) {
  */
 export function RecollerPracticas(destinos) {
     return $Call.ByID(3473008485, destinos);
+}
+
+/**
+ * RuidoArmado di se o control de ruído está armado agora mesmo. O frontend
+ * consúltao ao arrincar para pintar a icona do micrófono conforme ao estado
+ * real do backend: antes a icona nacía sempre apagada aínda que o monitor
+ * estivese a traballar, e era imposible saber desde a aula que estaba activo.
+ * @returns {$CancellablePromise<boolean>}
+ */
+export function RuidoArmado() {
+    return $Call.ByID(3817091198);
 }
 
 /**
@@ -557,7 +577,7 @@ export function SSHResize(cols, rows) {
  */
 export function SelectFicheiros() {
     return $Call.ByID(2584716195).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType20($result);
+        return $$createType3($result);
     }));
 }
 
@@ -629,21 +649,21 @@ export function XerarInventario(prefixo, dominio, n) {
 const $$createType0 = $models.AccionInfo.createFrom;
 const $$createType1 = $Create.Array($$createType0);
 const $$createType2 = $Create.Map($Create.Any, $Create.Any);
-const $$createType3 = actualizacion$0.Estado.createFrom;
-const $$createType4 = $models.AulaConfig.createFrom;
-const $$createType5 = $models.Equipo.createFrom;
-const $$createType6 = $Create.Array($$createType5);
-const $$createType7 = tao$0.Sesion.createFrom;
-const $$createType8 = $Create.Map($Create.Any, $$createType7);
-const $$createType9 = $Create.Map($Create.Any, $Create.Any);
-const $$createType10 = $Create.Map($Create.Any, $$createType2);
-const $$createType11 = $models.IdiomaInfo.createFrom;
-const $$createType12 = $Create.Array($$createType11);
-const $$createType13 = $Create.Map($Create.Any, $Create.Any);
-const $$createType14 = $models.ModuloInfo.createFrom;
-const $$createType15 = $Create.Array($$createType14);
-const $$createType16 = $models.MotorInfo.createFrom;
-const $$createType17 = $Create.Array($$createType16);
-const $$createType18 = $models.PanelResposta.createFrom;
-const $$createType19 = $Create.Nullable($$createType18);
-const $$createType20 = $Create.Array($Create.Any);
+const $$createType3 = $Create.Array($Create.Any);
+const $$createType4 = actualizacion$0.Estado.createFrom;
+const $$createType5 = $models.AulaConfig.createFrom;
+const $$createType6 = $models.Equipo.createFrom;
+const $$createType7 = $Create.Array($$createType6);
+const $$createType8 = tao$0.Sesion.createFrom;
+const $$createType9 = $Create.Map($Create.Any, $$createType8);
+const $$createType10 = $Create.Map($Create.Any, $Create.Any);
+const $$createType11 = $Create.Map($Create.Any, $$createType2);
+const $$createType12 = $models.IdiomaInfo.createFrom;
+const $$createType13 = $Create.Array($$createType12);
+const $$createType14 = $Create.Map($Create.Any, $Create.Any);
+const $$createType15 = $models.ModuloInfo.createFrom;
+const $$createType16 = $Create.Array($$createType15);
+const $$createType17 = $models.MotorInfo.createFrom;
+const $$createType18 = $Create.Array($$createType17);
+const $$createType19 = $models.PanelResposta.createFrom;
+const $$createType20 = $Create.Nullable($$createType19);

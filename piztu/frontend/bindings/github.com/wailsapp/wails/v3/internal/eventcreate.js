@@ -18,6 +18,7 @@ function configure() {
         "actualizacion_piztu_cambiada": $$createType0,
         "ansible_setup_completo": $$createType1,
         "ansible_setup_log": $$createType1,
+        "aula_salt_master_resolto": $$createType1,
         "clave_completo": $$createType1,
         "clave_hosts_completo": $$createType1,
         "clave_hosts_log": $$createType1,

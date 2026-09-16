@@ -18,7 +18,7 @@ import {
     SelectFicheiros, EnviarPracticas, RecollerPracticas, ListarFicheiros, AbrirFicheiro,
     GetUmbral, GardarUmbral,
     GetEstadoTao, AbrirTao,
-    IniciarRuido, DetenerRuido,
+    IniciarRuido, DetenerRuido, RuidoArmado,
     XerarInventario, GetAulaConfig, DistribuirClaveSSH, EscanearRede, InstalarSalt, ComprobarSalt, InstalarAnsible,
     InstalarTaoClientes,
     DescubrirRede, DistribuirClaveHosts,
@@ -1146,11 +1146,16 @@ document.getElementById('limiar').addEventListener('input', (e) => {
 });
 
 // Interruptor manual do monitor de ruído (← chk_ruido/toggle_monitor de main.py).
-// IMPORTANTE: o monitor NON arrinca só ao abrir a app — pode bloquear todos os
-// equipos automaticamente se o ruído persiste, así que ten que ser sempre unha
-// decisión explícita do profesor. Por iso actívase/desactívase mantendo premida
-// a icona do micrófono 3s (mesmo xesto e animación ca #btn-motor), non cun
-// simple clic. Empeza desactivado.
+// IMPORTANTE: o control de ruído NON se arma só ao abrir a app — pode bloquear
+// todos os equipos automaticamente se o ruído persiste, así que ten que ser
+// sempre unha decisión explícita do profesor. Por iso actívase/desactívase
+// mantendo premida a icona do micrófono 3s (mesmo xesto e animación ca
+// #btn-motor), non cun simple clic. Empeza desactivado.
+//
+// O estado real vive no backend (App.RuidoArmado): o micrófono pode estar a
+// escoitar para o vúmetro sen que o control estea armado, e esta icona amosa o
+// segundo, non o primeiro. Consúltase ao arrincar porque dar por feito que
+// empezaba apagado foi o que ocultou durante meses que o monitor traballaba só.
 let monitorRuidoActivo = false;
 let temporizadorMic = null;
 const btnMic = document.getElementById('btn-mic');
@@ -1184,6 +1189,11 @@ btnMic.addEventListener('mouseup', cancelarPresionMic);
 btnMic.addEventListener('touchend', cancelarPresionMic);
 btnMic.addEventListener('mouseleave', cancelarPresionMic);
 btnMic.addEventListener('touchcancel', cancelarPresionMic);
+
+RuidoArmado().then((armado) => {
+    monitorRuidoActivo = !!armado;
+    btnMic.classList.toggle('activo', monitorRuidoActivo);
+}).catch(() => {});
 
 // Niveis do monitor de ruído (integrado en Go, ← internal/ruido).
 Events.On('ruido_actual', (e) => ((d) => {
