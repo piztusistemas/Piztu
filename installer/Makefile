@@ -62,6 +62,10 @@ files:
 	@cp ../piztu/build/bin/historial-daemon files/historial-daemon
 	@cp ../systemd/piztu-historial.service files/systemd/piztu-historial.service
 	@cp ../config.yaml ../hosts ../ansible.cfg ../logo.png files/
+	@# O LICENSE acompaña ao binario instalado: a AGPL pídeo e o diálogo
+	@# «Sobre Piztu» remata dicindo "Texto completo no ficheiro LICENSE",
+	@# que ata agora non chegaba a /opt/piztu.
+	@cp ../LICENSE files/LICENSE
 	@cp ../lanzar_piztu.sh ../distribuirClave.sh ../xerar_inventario.sh files/
 	@cp -r ../playbooks/. files/playbooks/
 	@cp -r ../salt/. files/salt/
