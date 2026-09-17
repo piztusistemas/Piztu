@@ -3,7 +3,7 @@
 //
 // A versión instalada lese do ficheiro VERSION embebido na raíz do módulo Go.
 // A versión publicada consúltase na última "Release" de GitHub do
-// repositorio piztutao/piztu (https://github.com/piztutao/piztu/releases) —
+// repositorio piztusistemas/Piztu (https://github.com/piztusistemas/Piztu/releases) —
 // a Release leva como tag o número de versión (ex.: "26.9") e, adxunto, un
 // .zip que contén só o executable "piztu" novo (todo o resto — frontend,
 // idiomas, playbooks, salt — vai embebido dentro del con go:embed, así que
@@ -18,7 +18,7 @@
 // AplicarEnCaliente compróbao antes de instalar nada. Sen isto, quen puidese
 // publicar unha Release (ex.: un token filtrado) podería facer executar
 // calquera cousa, coas mesmas credenciais ca Piztu, en cada aula que
-// actualizase — ver https://github.com/piztutao/piztu/security.
+// actualizase — ver https://github.com/piztusistemas/Piztu/security.
 package actualizacion
 
 import (
@@ -43,7 +43,7 @@ import (
 //go:embed VERSION
 var versionFicheiro string
 
-const repo = "piztutao/piztu"
+const repo = "piztusistemas/Piztu"
 const urlUltimaRelease = "https://api.github.com/repos/" + repo + "/releases/latest"
 const timeoutComprobar = 5 * time.Second
 const timeoutDescarga = 60 * time.Second
@@ -98,7 +98,7 @@ func VersionLocal() string {
 	return strings.TrimSpace(versionFicheiro)
 }
 
-// Comprobar consulta a última Release de piztutao/piztu en GitHub e compárea
+// Comprobar consulta a última Release de piztusistemas/Piztu en GitHub e compárea
 // coa versión instalada. Nunca devolve erro cara ao chamador: se falla a rede,
 // non hai releases publicadas, ou a resposta non é válida, devolve
 // Disponible=false para non bloquear o arranque de piztu.

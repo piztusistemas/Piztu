@@ -69,8 +69,11 @@ func TestSementarModulosBaixaCoCartafolBaleiro(t *testing.T) {
 	}
 }
 
-// Con algo dentro, a lista xa é decisión do profesor: non se engade nada.
-func TestSementarModulosNonTocaUnCartafolConModulos(t *testing.T) {
+// Un módulo NOVO publicado no repo ten que chegar tamén aos equipos que xa
+// teñen módulos instalados — non só a unha instalación recén feita. Antes
+// sementarModulos paraba en seco se o cartafol tiña algo, e iso deixaba os
+// equipos da aula sen os módulos publicados despois de instalar Piztu.
+func TestSementarModulosEngadeOsQueFaltanAindaQueXaHaxaAlgun(t *testing.T) {
 	dir := t.TempDir()
 	srv := servidorDeModulos(t, "xa-instalado")
 	defer srv.Close()
@@ -84,14 +87,49 @@ func TestSementarModulosNonTocaUnCartafolConModulos(t *testing.T) {
 		t.Fatal("a primeira sementeira debería ter baixado o módulo")
 	}
 
-	// Agora o catálogo ofrece outro módulo distinto: xa non debe tocar nada.
+	// Agora o catálogo ofrece outro módulo distinto: ten que baixalo tamén.
 	srv2 := servidorDeModulos(t, "outro")
 	defer srv2.Close()
 	a.catalogo["outro"] = modulos.CatalogoEntrada{URL: srv2.URL + "/outro_1.0.zip", Version: "1.0"}
 	a.sementarModulos()
 
-	if got := modulos.Externos(dir); len(got) != 1 {
-		t.Errorf("non debía engadir nada cun módulo xa presente, obtido %+v", got)
+	got := modulos.Externos(dir)
+	if len(got) != 2 {
+		t.Fatalf("esperaba os dous módulos, obtido %+v", got)
+	}
+	ids := map[string]bool{}
+	for _, m := range got {
+		ids[m.ID] = true
+	}
+	if !ids["xa-instalado"] || !ids["outro"] {
+		t.Errorf("esperaba xa-instalado e outro, obtido %+v", got)
+	}
+}
+
+// O que NON debe facer é reinstalar por riba dun módulo que xa está: poñelo
+// ao día é traballo de actualizarModulosAoDia (que compara versións), non
+// desta función. Compróbase cun ficheiro centinela dentro do cartafol do
+// módulo: se sementarModulos volvese descomprimir o .zip enriba, esvaecería.
+func TestSementarModulosNonReinstalaUnModuloXaPresente(t *testing.T) {
+	dir := t.TempDir()
+	srv := servidorDeModulos(t, "xa-instalado")
+	defer srv.Close()
+
+	a := &App{
+		cfg:      &config.Config{ModulosDir: dir},
+		catalogo: map[string]modulos.CatalogoEntrada{"xa-instalado": {URL: srv.URL + "/xa-instalado_1.0.zip", Version: "1.0"}},
+	}
+	a.sementarModulos()
+
+	centinela := filepath.Join(dir, "xa-instalado", "centinela.txt")
+	if err := os.WriteFile(centinela, []byte("non me toques\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	a.sementarModulos() // segunda pasada: non debe tocar o que xa está
+
+	if _, err := os.Stat(centinela); err != nil {
+		t.Errorf("reinstalou por riba dun módulo xa presente: %v", err)
 	}
 }
 

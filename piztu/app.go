@@ -774,7 +774,8 @@ func (a *App) ComprobarActualizacionsModulos() {
 	// E aplicar o que atope, non só amosalo: os módulos mantéñense ao día
 	// sós (ver vixiarActualizacionsModulos), e este botón é o mesmo traballo
 	// pedido xa. Deixalo só en "avisar" faría que premelo amosase un botón
-	// "Actualizar" que a seguinte pasada automática ía premer soa.
+	// "Descargar"/"Actualizar" que a seguinte pasada automática ía premer soa.
+	a.sementarModulos()
 	a.actualizarModulosAoDia()
 }
 
@@ -802,29 +803,31 @@ func (a *App) vixiarActualizacionsModulos() {
 	for {
 		time.Sleep(intervaloActualizacionModulos)
 		a.refrescarCatalogo()
-		a.actualizarModulosAoDia()
+		a.sementarModulos()        // módulos novos publicados dende o arranque
+		a.actualizarModulosAoDia() // e versións novas dos que xa hai
 	}
 }
 
-// sementarModulos baixa TODOS os módulos do catálogo cando o cartafol de
-// módulos non ten ningún. É o caso dunha instalación recén feita: sen isto o
-// profesor abre Piztu e atópase a lista de módulos baleira agás os botóns
-// "Descargar", tendo que premer un por un algo que nunca vai querer doutro
-// xeito.
+// sementarModulos baixa TODO módulo do catálogo que non estea xa no cartafol
+// de módulos. É o caso dunha instalación recén feita — sen isto o profesor
+// abre Piztu e atópase a lista baleira agás os botóns "Descargar", tendo que
+// premer un por un algo que nunca vai querer doutro xeito — pero tamén o dun
+// módulo NOVO publicado en piztusistemas/modulos despois de instalar Piztu:
+// aparece só no seguinte repaso, sen que ninguén teña que ir premer nada nin
+// tocar config.yaml (ver resolverGitHubRepoCompleto).
 //
-// Só actúa co cartafol COMPLETAMENTE baleiro, a posta: en canto haxa un módulo,
-// a lista pasa a ser unha decisión do profesor (quitou un que non usa, engadiu
-// un de terceiros á man) e ninguén debe desfacerlla por el. O efecto lateral
-// aceptado é que baleirar o cartafol enteiro se comporta coma un "restaurar":
-// ao seguinte arranque volven baixarse.
+// Antes só actuaba co cartafol COMPLETAMENTE baleiro, para non desfacer a
+// decisión dun profesor que quitase un módulo que non usa. Iso deixaba fóra o
+// caso de arriba (un módulo novo nunca chegaba aos equipos xa instalados), e
+// agora pesa máis manter a aula ao día: o prezo é que un módulo borrado á man
+// volve baixarse. Para quitalo de verdade, desactívao en ⚙ Aula → Módulos —
+// ese estado si se respecta, porque vive no almacén de axustes e non no
+// cartafol (ver ClaveActivo).
 //
 // Descarga pero NON activa, coma o botón "Descargar": activar un módulo segue
 // sendo decisión do profesor en ⚙ Aula → Módulos (hai módulos que poden ser de
 // pago, ver o comentario de Tao no arranque).
 func (a *App) sementarModulos() {
-	if len(modulos.Externos(a.cfg.ModulosDir)) > 0 {
-		return
-	}
 	catalogo := a.catalogoCache()
 	if len(catalogo) == 0 {
 		return // sen rede, ou catálogo baleiro: nada que facer, e non é un erro
@@ -838,6 +841,9 @@ func (a *App) sementarModulos() {
 
 	var baixados int
 	for _, id := range ids {
+		if modulos.Instalado(a.cfg.ModulosDir, id) {
+			continue // xa está: mantelo ao día é traballo de actualizarModulosAoDia
+		}
 		if err := modulos.Instalar(a.cfg.ModulosDir, id, catalogo[id]); err != nil {
 			// Un módulo que falla non pode parar os demais: quedará co seu
 			// botón "Descargar" na lista, coma antes desta función.
@@ -855,9 +861,9 @@ func (a *App) sementarModulos() {
 
 // actualizarModulosAoDia pon cada módulo externo XA INSTALADO na versión do
 // catálogo se esta é máis nova (compárao con modulos.VersionMaior). Complementa
-// sementarModulos: aquela só actúa co cartafol totalmente baleiro e nunca
-// reintroduce un módulo que o profesor quitou; esta non engade nin quita
-// ningún, só mantén ao día os que xa hai. O estado activo/inactivo consérvase
+// sementarModulos: aquela ENGADE os que faltan (un módulo novo no repo, ou
+// unha instalación recén feita); esta non engade nin quita ningún, só pon ao
+// día os que xa hai. O estado activo/inactivo consérvase
 // (vive á parte, ver modulos.Actualizar). Chámase en fondo ao arrincar, xusto
 // despois de refrescarCatalogo — así o profesor non ten que premer "Actualizar"
 // módulo por módulo cada vez que sae unha versión nova en piztusistemas/modulos.
@@ -929,7 +935,7 @@ func (a *App) avisarModulosCambiados() {
 	})
 }
 
-// comprobarActualizacionPiztu consulta a última Release de piztutao/piztu en
+// comprobarActualizacionPiztu consulta a última Release de piztusistemas/Piztu en
 // GitHub (ver internal/actualizacion) e avisa o frontend (evento
 // actualizacion_piztu_cambiada) para que o botón "i" amose o bordo vermello
 // sen ter que reiniciar piztu.
