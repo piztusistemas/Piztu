@@ -10,6 +10,13 @@
     # Axustes opcionais
     filebrowser_version: "v2.63.18"
     filebrowser_port: 8080
+    # Subruta pública: File Browser segue a escoitar no 8080, pero Apache (porto
+    # 80) reenvíalle todo o que colgue de {{ filebrowser_baseurl }}, así o
+    # alumnado entra nun http://<servidor>/arquivos en vez de aprender un
+    # http://<servidor>:8080. Ten que coincidir co --baseurl do propio File
+    # Browser: sen el, os enlaces absolutos que xera (/static, /api) sairían da
+    # subruta e a interface non cargaría detrás do proxy.
+    filebrowser_baseurl: "/arquivos"
     filebrowser_root: "/var/www/html/arquivos"
     # Usuario do sistema que executa Piztu (app.py/main.py). Se se indica, engádese
     # ao grupo www-data para que poida LER o cartafol compartido que crea File
@@ -69,6 +76,7 @@
       command: >
         /usr/local/bin/filebrowser config set --database=/etc/filebrowser/filebrowser.db
         --address=0.0.0.0 --port={{ filebrowser_port }}
+        --baseurl={{ filebrowser_baseurl }}
         --root={{ filebrowser_root }} --log=/var/log/filebrowser.log
       changed_when: true
 
@@ -118,6 +126,46 @@
         enabled: yes
         state: restarted
 
+    # ── Porto 80: Apache como proxy inverso ──────────────────────────────────
+    # File Browser segue no 8080 (sen privilexios, como www-data), e é Apache
+    # quen publica {{ filebrowser_baseurl }} no porto 80. Así o alumnado escribe
+    # http://<servidor>{{ filebrowser_baseurl }} e o servidor web do alumnado
+    # (/var/www/html) segue intacto na raíz. Se non hai Apache neste servidor
+    # sáltase todo o bloque: File Browser queda accesible no 8080 coma sempre,
+    # iso si, xa baixo a subruta {{ filebrowser_baseurl }}.
+    - name: 14b. Comprobar se hai Apache neste servidor
+      stat:
+        path: /usr/sbin/apache2
+      register: apache_bin
+
+    - name: 14c. Activar os módulos de proxy de Apache
+      # proxy_wstunnel é para a consola/eventos de File Browser, que usan
+      # websockets: sen el o proxy devolve 500 nesa ruta.
+      command: a2enmod proxy proxy_http proxy_wstunnel
+      when: apache_bin.stat.exists
+      register: apache_modulos
+      changed_when: "'Enabling' in apache_modulos.stdout"
+
+    - name: 14d. Escribir a configuración de proxy de Apache para File Browser
+      copy:
+        dest: /etc/apache2/conf-available/piztu-filebrowser.conf
+        content: |
+          # Xerado por Piztu (playbooks/instalar_filebrowser.yaml). Non editar a man:
+          # sobrescríbese en cada instalación de File Browser.
+          <IfModule mod_proxy.c>
+            ProxyPreserveHost On
+            # O websocket vai primeiro: a primeira regra que casa gaña.
+            ProxyPass {{ filebrowser_baseurl }}/api/command ws://127.0.0.1:{{ filebrowser_port }}{{ filebrowser_baseurl }}/api/command
+            ProxyPass {{ filebrowser_baseurl }} http://127.0.0.1:{{ filebrowser_port }}{{ filebrowser_baseurl }}
+            ProxyPassReverse {{ filebrowser_baseurl }} http://127.0.0.1:{{ filebrowser_port }}{{ filebrowser_baseurl }}
+          </IfModule>
+      when: apache_bin.stat.exists
+
+    - name: 14e. Activar a configuración e recargar Apache
+      shell: a2enconf piztu-filebrowser && systemctl reload apache2
+      when: apache_bin.stat.exists
+      changed_when: true
+
     - name: 15. Engadir o usuario de Piztu ao grupo www-data (lectura de sesións de Tao)
       user:
         name: "{{ piztu_os_user }}"
@@ -129,7 +177,8 @@
     - name: Finalizado
       debug:
         msg: >
-          File Browser instalado en http://localhost:{{ filebrowser_port }}
+          File Browser instalado en
+          {% if apache_bin.stat.exists %}http://{{ ansible_fqdn | default(inventory_hostname) }}{{ filebrowser_baseurl }} (porto 80, vía Apache){% else %}http://localhost:{{ filebrowser_port }}{{ filebrowser_baseurl }}{% endif %}
           (usuario: {{ filebrowser_admin_user }}).
           {% if piztu_grupo_www_data is defined and piztu_grupo_www_data is changed %}
           IMPORTANTE: "{{ piztu_os_user }}" engadiuse ao grupo www-data; pecha sesión

@@ -23,6 +23,11 @@
       command: systemctl daemon-reload
       changed_when: true
 
+    - name: 4a. Comprobar se hai Apache neste servidor
+      stat:
+        path: /usr/sbin/apache2
+      register: apache_bin
+
     - name: 4. Eliminar o binario e a configuración de File Browser
       file:
         path: "{{ item }}"
@@ -31,6 +36,14 @@
         - /usr/local/bin/filebrowser
         - /etc/filebrowser
         - /var/log/filebrowser.log
+
+    - name: 4b. Retirar o proxy de Apache que publicaba File Browser no porto 80
+      # Só a configuración que escribiu a instalación (conf-available +
+      # conf-enabled); os módulos de proxy déixanse activados, que poden estar
+      # a ser usados por outros sitios do servidor.
+      shell: a2disconf piztu-filebrowser 2>/dev/null; rm -f /etc/apache2/conf-available/piztu-filebrowser.conf; systemctl reload apache2 2>/dev/null; true
+      when: apache_bin.stat.exists
+      changed_when: true
 
     # Borra tamén {{ filebrowser_root }} (por defecto /var/www/html/arquivos):
     # é onde File Browser garda TODOS os datos do aplicativo — ficheiros e

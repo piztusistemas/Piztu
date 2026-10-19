@@ -8,12 +8,11 @@
   become: yes
   vars:
     usuario_alumno: "usuario"
+    # As opcións bloquear_* NON se declaran aquí: "x: {{ x | default(..) }}"
+    # é unha referencia circular que Ansible rexeita ("recursive loop")
+    # sempre que non chegue por -e — o caso do control de ruído, que non
+    # bloqueaba nada. O valor por defecto ponse en cada uso.
     chave_publica: "{{ lookup('file', (ansible_ssh_private_key_file | default('~/.ssh/id_rsa')) ~ '.pub') }}"
-    bloquear_internet: "{{ bloquear_internet | default(false) }}"
-    bloquear_ssh: "{{ bloquear_ssh | default(false) }}"
-    bloquear_son: "{{ bloquear_son | default(false) }}"
-    bloquear_rato: "{{ bloquear_rato | default(true) }}"
-    bloquear_teclado: "{{ bloquear_teclado | default(true) }}"
 
   tasks:
     - name: Garantir persistencia de chaves SSH (Usuario e Skel)
@@ -63,14 +62,14 @@
         if command -v xinput > /dev/null; then
           LISTAXINPUT=$(sudo -u {{ usuario_alumno }} DISPLAY=:0 XAUTHORITY="$XAUTH_REAL" xinput list)
 
-        {% if bloquear_rato | bool %}
+        {% if bloquear_rato | default(true) | bool %}
           echo "$LISTAXINPUT" | grep -i pointer | grep -v XTEST | grep -oP 'id=\K[0-9]+' | while read -r id; do
             if [ "$id" -gt 4 ]; then
               sudo -u {{ usuario_alumno }} DISPLAY=:0 XAUTHORITY="$XAUTH_REAL" xinput disable "$id" || true
             fi
           done
         {% endif %}
-        {% if bloquear_teclado | bool %}
+        {% if bloquear_teclado | default(true) | bool %}
           echo "$LISTAXINPUT" | grep -i keyboard | grep -v XTEST | grep -oP 'id=\K[0-9]+' | while read -r id; do
             if [ "$id" -gt 4 ]; then
               sudo -u {{ usuario_alumno }} DISPLAY=:0 XAUTHORITY="$XAUTH_REAL" xinput disable "$id" || true
@@ -79,7 +78,7 @@
         {% endif %}
         fi
 
-        {% if bloquear_rato | bool or bloquear_teclado | bool %}
+        {% if bloquear_rato | default(true) | bool or bloquear_teclado | default(true) | bool %}
         # 2. Lanzar aviso persistente en segundo plano. Só se rato e/ou
         # teclado están bloqueados (a mensaxe emerxente non ten sentido se o
         # alumno pode seguir escribindo/movendo o rato con normalidade — ver
@@ -118,7 +117,7 @@
 
     - name: Mutear son
       command: amixer set Master mute
-      when: bloquear_son | bool
+      when: bloquear_son | default(false) | bool
       ignore_errors: yes
 
     # Bloqueo de rede: só corta o que INICIA o propio equipo (cadea OUTPUT),
@@ -159,14 +158,14 @@
 
           "$NFT" add rule inet piztu_bloqueo output oifname "lo" accept
           "$NFT" add rule inet piztu_bloqueo output ct state established,related accept
-        {% if bloquear_ssh | bool %}
+        {% if bloquear_ssh | default(false) | bool %}
           # Impide que O ALUMNO inicie el mesmo conexións SSH saíntes
           # (cliente). Non toca sshd (o servizo que recibe conexións): esa é
           # a canle coa que Piztu controla o equipo, e ten que seguir
           # funcionando.
           "$NFT" add rule inet piztu_bloqueo output tcp dport 22 drop
         {% endif %}
-        {% if bloquear_internet | bool %}
+        {% if bloquear_internet | default(false) | bool %}
           # Permite a rede local (onde vive o servidor de Piztu/Salt: rangos
           # privadas IPv4, e link-local/unique-local IPv6 — imprescindibles
           # para ARP/veciñanza e resolución mDNS de nomes .local coma este
@@ -199,10 +198,10 @@
           "$IPT" -C OUTPUT -j PIZTU_BLOQUEO 2>/dev/null || "$IPT" -I OUTPUT -j PIZTU_BLOQUEO
           "$IPT" -A PIZTU_BLOQUEO -o lo -j RETURN
           "$IPT" -A PIZTU_BLOQUEO -m state --state ESTABLISHED,RELATED -j RETURN
-        {% if bloquear_ssh | bool %}
+        {% if bloquear_ssh | default(false) | bool %}
           "$IPT" -A PIZTU_BLOQUEO -p tcp --dport 22 -j DROP
         {% endif %}
-        {% if bloquear_internet | bool %}
+        {% if bloquear_internet | default(false) | bool %}
           "$IPT" -A PIZTU_BLOQUEO -d 10.0.0.0/8 -j RETURN
           "$IPT" -A PIZTU_BLOQUEO -d 172.16.0.0/12 -j RETURN
           "$IPT" -A PIZTU_BLOQUEO -d 192.168.0.0/16 -j RETURN
@@ -217,10 +216,10 @@
           "$IPT6" -C OUTPUT -j PIZTU_BLOQUEO 2>/dev/null || "$IPT6" -I OUTPUT -j PIZTU_BLOQUEO
           "$IPT6" -A PIZTU_BLOQUEO -o lo -j RETURN
           "$IPT6" -A PIZTU_BLOQUEO -m state --state ESTABLISHED,RELATED -j RETURN
-        {% if bloquear_ssh | bool %}
+        {% if bloquear_ssh | default(false) | bool %}
           "$IPT6" -A PIZTU_BLOQUEO -p tcp --dport 22 -j DROP
         {% endif %}
-        {% if bloquear_internet | bool %}
+        {% if bloquear_internet | default(false) | bool %}
           "$IPT6" -A PIZTU_BLOQUEO -d fe80::/10 -j RETURN
           "$IPT6" -A PIZTU_BLOQUEO -d fc00::/7 -j RETURN
           "$IPT6" -A PIZTU_BLOQUEO -j DROP

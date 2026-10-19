@@ -18,6 +18,15 @@ let destDirCache = '/opt/piztu';
 let instDescCache = '';
 let finDescCache = '';
 let versionCache = '';
+
+// infoConVersion pon a versión (a de Piztu: installer/VERSION cópiase dela ao
+// compilar) xunto a "Piztu Sistemas", na primeira liña de app.info, e non ao
+// final do bloque, onde quedaba pegada ao enderezo web.
+function infoConVersion() {
+    const [primeira, ...resto] = t('app.info', 'Piztu Sistemas').split('\n');
+    const cabeceira = versionCache ? primeira + ' ' + versionCache : primeira;
+    return [cabeceira, ...resto].join('\n');
+}
 let current = 0;
 
 const STEPS = [
@@ -77,7 +86,7 @@ function render() {
           `).join('')}
         </div>
         <div class="sidebar-sep"></div>
-        <div class="sidebar-info">${t('app.info', 'Piztu Sistemas')}${versionCache ? ' ' + versionCache : ''}</div>
+        <div class="sidebar-info">${infoConVersion()}</div>
         <div class="sidebar-info">${t('app.licenza', 'Licenza AGPLv3')}</div>
       </div>
       <div class="main-panel">

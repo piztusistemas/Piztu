@@ -131,6 +131,47 @@ func (s *Store) GardarUmbral(valor int) error {
 	return os.WriteFile(s.cfg.UmbralFile, []byte(strconv.Itoa(valor)), 0o644)
 }
 
+// Límites do configurador de ruído (⚙ Aula). Fóra deles o valor non ten
+// sentido na aula: un limiar por debaixo de 5 % salta co ruído de fondo, e un
+// bloqueo de máis de 10 minutos xa non é un toque de atención.
+const (
+	UmbralMin          = 5
+	UmbralMax          = 100
+	DuracionBloqueoMin = 5
+	DuracionBloqueoMax = 600
+	claveDuracionRuido = "ruido_duracion_bloqueo"
+)
+
+func acoutar(v, min, max int) int {
+	if v < min {
+		return min
+	}
+	if v > max {
+		return max
+	}
+	return v
+}
+
+// LerDuracionBloqueoRuido devolve os segundos que o control de ruído deixa os
+// equipos bloqueados. Mentres o profesor non o cambie en ⚙ Aula, vale o
+// seg_duracion_bloqueo de config.yaml.
+func (s *Store) LerDuracionBloqueoRuido() int {
+	defecto := s.cfg.Ruido.SegDuracionBloqueo
+	v, err := strconv.Atoi(s.LerAxuste(claveDuracionRuido, strconv.Itoa(defecto)))
+	if err != nil {
+		return defecto
+	}
+	return acoutar(v, DuracionBloqueoMin, DuracionBloqueoMax)
+}
+
+// GardarDuracionBloqueoRuido persiste a duración (acoutada aos límites).
+func (s *Store) GardarDuracionBloqueoRuido(seg int) error {
+	return s.GardarAxuste(claveDuracionRuido, strconv.Itoa(acoutar(seg, DuracionBloqueoMin, DuracionBloqueoMax)))
+}
+
+// AcoutarUmbral leva o limiar aos límites do configurador.
+func AcoutarUmbral(v int) int { return acoutar(v, UmbralMin, UmbralMax) }
+
 // opcionsBloqueoDefecto mantén o comportamento previo de bloqueoTotal (só
 // desactivaba rato e teclado) mentres o profesor non configure nada máis.
 func opcionsBloqueoDefecto() map[string]bool {

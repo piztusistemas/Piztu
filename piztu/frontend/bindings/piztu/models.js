@@ -567,6 +567,74 @@ export class PanelResposta {
     }
 }
 
+/**
+ * RuidoConfig é o que amosa e garda o configurador de ruído de ⚙ Aula.
+ */
+export class RuidoConfig {
+    /**
+     * Creates a new RuidoConfig instance.
+     * @param {Partial<RuidoConfig>} [$$source = {}] - The source object to create the RuidoConfig.
+     */
+    constructor($$source = {}) {
+        if (!("umbral" in $$source)) {
+            /**
+             * % de nivel medio que dispara o aviso
+             * @member
+             * @type {number}
+             */
+            this["umbral"] = 0;
+        }
+        if (!("duracion" in $$source)) {
+            /**
+             * segundos que dura o bloqueo por ruído
+             * @member
+             * @type {number}
+             */
+            this["duracion"] = 0;
+        }
+        if (!("umbralMin" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["umbralMin"] = 0;
+        }
+        if (!("umbralMax" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["umbralMax"] = 0;
+        }
+        if (!("duracionMin" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["duracionMin"] = 0;
+        }
+        if (!("duracionMax" in $$source)) {
+            /**
+             * @member
+             * @type {number}
+             */
+            this["duracionMax"] = 0;
+        }
+
+        Object.assign(this, $$source);
+    }
+
+    /**
+     * Creates a new RuidoConfig instance from a string or object.
+     * @param {any} [$$source = {}]
+     * @returns {RuidoConfig}
+     */
+    static createFrom($$source = {}) {
+        let $$parsedSource = typeof $$source === 'string' ? JSON.parse($$source) : $$source;
+        return new RuidoConfig(/** @type {Partial<RuidoConfig>} */($$parsedSource));
+    }
+}
+
 // Private type creation functions
 const $$createType0 = modulos$0.Panel.createFrom;
 const $$createType1 = $Create.Nullable($$createType0);

@@ -60,6 +60,25 @@ export class Estado {
              */
             this["notas"] = "";
         }
+        if (!("automatica" in $$source)) {
+            /**
+             * Automatica di se a Release trae o "piztu_<versión>.zip" que permite
+             * actualizar desde "Sobre Piztu". Se non o trae, Disponible segue a ser
+             * certo (hai versión nova e hai que avisar) e a UI ofrece en troques
+             * descargar o instalador desde URLRelease.
+             * @member
+             * @type {boolean}
+             */
+            this["automatica"] = false;
+        }
+        if (!("url_release" in $$source)) {
+            /**
+             * páxina da Release en GitHub
+             * @member
+             * @type {string}
+             */
+            this["url_release"] = "";
+        }
 
         Object.assign(this, $$source);
     }

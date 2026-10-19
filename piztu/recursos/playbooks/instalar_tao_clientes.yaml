@@ -8,6 +8,9 @@
 # Requerido: -e tao_src=<ruta local no servidor ao binario embebido>
 # Opcional:  -e tao_icon_src=<ruta local no servidor á icona embebida>
 #            (se non se indica, o acceso directo queda sen icona propia)
+#            -e servidor_url=<URL pública do File Browser do servidor>
+#            (escríbese en /opt/piztu/tao-servidor.conf; é a que Tao amosa por
+#            defecto na pantalla de acceso. Baleiro = non tocar o ficheiro)
 
 - name: Instalar Tao nos equipos cliente
   hosts: aula
@@ -19,6 +22,7 @@
     tao_icon_dest: "/usr/share/pixmaps/tao.png"
     usuario_alumno: "usuario"
     tao_icon_src: ""
+    servidor_url: ""
 
   tasks:
     - name: Crear /opt/piztu no equipo cliente (se non existise xa)
@@ -30,6 +34,20 @@
     - name: Copiar a icona de Tao
       copy: {src: "{{ tao_icon_src }}", dest: "{{ tao_icon_dest }}", mode: '0644'}
       when: tao_icon_src | length > 0
+
+    - name: Escribir a URL do servidor de ficheiros para Tao
+      # Tao lé este ficheiro para preencher o campo "servidor" da pantalla de
+      # acceso (ver tao/servidor.go). Escríbese na instalación porque só o
+      # servidor sabe o seu propio nome de rede: o alumnado non ten que
+      # aprender nin teclear ningunha URL.
+      copy:
+        dest: "{{ tao_dest_dir }}/tao-servidor.conf"
+        mode: '0644'
+        content: |
+          # Xerado por Piztu ao instalar Tao. URL do servidor de ficheiros
+          # (File Browser) que Tao propón por defecto ao alumnado.
+          {{ servidor_url }}
+      when: servidor_url | length > 0
 
     - name: Crear a entrada de menú (Debian/GNOME/KDE)
       copy:

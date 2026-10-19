@@ -44,7 +44,11 @@ import (
 var versionFicheiro string
 
 const repo = "piztusistemas/Piztu"
-const urlUltimaRelease = "https://api.github.com/repos/" + repo + "/releases/latest"
+
+// urlUltimaRelease é variable (non constante) só para que os tests a apunten
+// a un servidor local.
+var urlUltimaRelease = "https://api.github.com/repos/" + repo + "/releases/latest"
+
 const timeoutComprobar = 5 * time.Second
 const timeoutDescarga = 60 * time.Second
 
@@ -56,6 +60,12 @@ type Estado struct {
 	URLDescarga   string `json:"url_descarga"` // "" se non hai asset .zip descargable
 	URLChecksum   string `json:"url_checksum"` // "" se a Release non publica "<zip>.sha256"
 	Notas         string `json:"notas"`        // descrición da Release (changelog)
+	// Automatica di se a Release trae o "piztu_<versión>.zip" que permite
+	// actualizar desde "Sobre Piztu". Se non o trae, Disponible segue a ser
+	// certo (hai versión nova e hai que avisar) e a UI ofrece en troques
+	// descargar o instalador desde URLRelease.
+	Automatica bool   `json:"automatica"`
+	URLRelease string `json:"url_release"` // páxina da Release en GitHub
 }
 
 type assetGitHub struct {
@@ -65,6 +75,7 @@ type assetGitHub struct {
 
 type releaseGitHub struct {
 	TagName string        `json:"tag_name"`
+	HTMLURL string        `json:"html_url"`
 	Body    string        `json:"body"`
 	Assets  []assetGitHub `json:"assets"`
 }
@@ -128,6 +139,12 @@ func Comprobar() Estado {
 
 	estado.VersionRemota = rel.TagName
 	estado.Notas = rel.Body
+	estado.URLRelease = rel.HTMLURL
+	// O aviso depende só de que haxa unha versión máis nova, non de como se
+	// empaquetou a Release: antes só se avisaba se traía o .zip, e como as
+	// Releases 26.8–26.10.1 só levaban o instalador, ningunha aula soubo nunca
+	// que había versión nova.
+	estado.Disponible = modulos.VersionMaior(estado.VersionRemota, estado.VersionLocal)
 
 	// escollerAssets busca especificamente "piztu_<versión>.zip", non
 	// "calquera .zip": a Release pode levar outros (ex.
@@ -139,12 +156,11 @@ func Comprobar() Estado {
 	// ficheiro chamado "piztu" (ver nomeExecutable), e fallaba.
 	urlZip, _, urlChecksum := escollerAssets(rel.Assets)
 	if urlZip == "" {
-		return estado // hai release, pero sen "piztu_*.zip" adxunto: nada que ofrecer
+		return estado // sen "piztu_*.zip": avísase, pero só se pode reinstalar
 	}
 	estado.URLDescarga = urlZip
 	estado.URLChecksum = urlChecksum
-
-	estado.Disponible = modulos.VersionMaior(estado.VersionRemota, estado.VersionLocal)
+	estado.Automatica = true
 	return estado
 }
 

@@ -16,7 +16,7 @@ import {
     ExecutarComando, ExecutarBloqueo, GetOpcionsBloqueo, GardarOpcionsBloqueo,
     SSHOpen, SSHInput, SSHResize, SSHClose,
     SelectFicheiros, EnviarPracticas, RecollerPracticas, ListarFicheiros, AbrirFicheiro,
-    GetUmbral, GardarUmbral,
+    GetUmbral, GardarUmbral, GetRuidoConfig, GardarRuidoConfig,
     GetEstadoTao, AbrirTao,
     IniciarRuido, DetenerRuido, RuidoArmado,
     XerarInventario, GetAulaConfig, DistribuirClaveSSH, EscanearRede, InstalarSalt, ComprobarSalt, InstalarAnsible,
@@ -361,6 +361,24 @@ document.querySelector('#app').innerHTML = `
         </div>
     </div>
 </div>
+
+<div id="ruido-config-modal" class="modal-overlay">
+    <div class="modal-box">
+        <div class="modal-titlebar">
+            <span id="cfg-ruido-titulo">🔊 Control de ruído</span>
+            <button class="modal-close" data-close="ruido-config-modal">✕</button>
+        </div>
+        <div class="modal-body">
+            <p class="modal-hint" id="cfg-ruido-desc">Cando o nivel medio de son supera o limiar, os equipos reciben un aviso; se o ruído continúa, bloquéanse e desbloquéanse sós pasado o tempo indicado.</p>
+            <label class="lbl-destino" for="cfg-ruido-umbral"><span id="cfg-ruido-umbral-label">Limiar de ruído</span>: <b id="cfg-ruido-umbral-valor">—</b></label>
+            <input type="range" id="cfg-ruido-umbral" min="5" max="100" value="50" style="width:100%; margin:6px 0 14px;">
+            <label class="lbl-destino" for="cfg-ruido-duracion" id="cfg-ruido-duracion-label">Duración do bloqueo (segundos)</label>
+            <input type="number" id="cfg-ruido-duracion" min="5" max="600" step="5" value="20" style="width:100%; margin-top:6px; padding:8px; box-sizing:border-box;">
+            <button class="btn-main on" id="btn-gardar-ruido" style="width:100%; margin-top:14px; padding:10px; justify-content:center;">Gardar</button>
+            <p class="modal-hint" id="cfg-ruido-resultado"></p>
+        </div>
+    </div>
+</div>
 `;
 
 const escenario = document.getElementById('escenario');
@@ -469,6 +487,12 @@ function aplicarTraducionsInterno() {
     document.getElementById('cfg-p5-desc').innerHTML = t('web.config.p5.desc',
         'Instala o paquete <code>ansible</code> con apt neste equipo, para habilitar o motor Ansible. Usa o contrasinal da tarxeta 2.');
     document.getElementById('btn-instalar-ansible').textContent = t('web.config.p5.instalar', 'Instalar Ansible (apt)');
+    document.getElementById('cfg-ruido-titulo').textContent = t('web.config.ruido.titulo', '🔊 Control de ruído');
+    document.getElementById('cfg-ruido-desc').textContent = t('web.config.ruido.desc',
+        'Cando o nivel medio de son supera o limiar, os equipos reciben un aviso; se o ruído continúa, bloquéanse e desbloquéanse sós pasado o tempo indicado.');
+    document.getElementById('cfg-ruido-umbral-label').textContent = t('web.config.ruido.umbral', 'Limiar de ruído');
+    document.getElementById('cfg-ruido-duracion-label').textContent = t('web.config.ruido.duracion', 'Duración do bloqueo (segundos)');
+    document.getElementById('btn-gardar-ruido').textContent = t('web.gardar', 'Gardar');
     document.getElementById('cfg-modulos-titulo').textContent = t('modulos.titulo', 'Módulos');
     document.getElementById('btn-comprobar-actualizacions').textContent = t('web.config.modulos.comprobar', '🔄 Comprobar actualizacións');
     document.getElementById('btn-abrir-modulos').textContent = t('web.config.modulos.abrir', '📂 Abrir o cartafol de módulos');
@@ -539,7 +563,9 @@ function pintarSobreActualizacion() {
         aviso.style.display = '';
         btn.style.display = '';
         btn.disabled = false;
-        btn.textContent = t('sobre.actualizar', '⟳ Actualizar');
+        btn.textContent = actualizacionPiztu.automatica
+            ? t('sobre.actualizar', '⟳ Actualizar')
+            : t('sobre.descargarinstalador', '⬇ Descargar o instalador');
     } else {
         aviso.style.display = 'none';
         btn.style.display = 'none';
@@ -903,6 +929,18 @@ function pintarListaModulos(lista) {
             });
             fila.appendChild(cfg);
         }
+        if (m.id === 'ruido') {
+            const cfgRuido = document.createElement('button');
+            cfgRuido.id = 'btn-ruido-config';
+            cfgRuido.className = 'modulo-cfg';
+            cfgRuido.textContent = '⚙';
+            cfgRuido.title = t('web.config.ruido.tip', 'Configurar o control de ruído (limiar e duración do bloqueo)');
+            cfgRuido.addEventListener('click', (ev) => {
+                ev.preventDefault();
+                abrirConfigRuido();
+            });
+            fila.appendChild(cfgRuido);
+        }
         if (m.id === 'tao') {
             const instalar = document.createElement('button');
             instalar.id = 'btn-tao-instalar-clientes';
@@ -1143,6 +1181,54 @@ document.getElementById('limiar').addEventListener('input', (e) => {
     currentUmbral = parseInt(e.target.value);
     document.getElementById('valorLimiar').textContent = currentUmbral + '%';
     GardarUmbral(currentUmbral);
+});
+
+// Configurador de ruído (⚙ Aula → Módulos → ⚙ de Ruído): limiar e duración do bloqueo. O limiar é o
+// mesmo valor ca o control deslizante da barra superior (umbral.txt), así que
+// gardar aquí actualiza tamén ese control. O monitor le os dous en cada ciclo:
+// valen ao momento, sen reiniciar nada.
+const cfgRuidoUmbral = document.getElementById('cfg-ruido-umbral');
+const cfgRuidoDuracion = document.getElementById('cfg-ruido-duracion');
+
+function pintarConfigRuido(c) {
+    cfgRuidoUmbral.min = c.umbralMin;
+    cfgRuidoUmbral.max = c.umbralMax;
+    cfgRuidoUmbral.value = c.umbral;
+    document.getElementById('cfg-ruido-umbral-valor').textContent = c.umbral + '%';
+    cfgRuidoDuracion.min = c.duracionMin;
+    cfgRuidoDuracion.max = c.duracionMax;
+    cfgRuidoDuracion.value = c.duracion;
+}
+
+function abrirConfigRuido() {
+    document.getElementById('cfg-ruido-resultado').textContent = '';
+    GetRuidoConfig().then((c) => {
+        pintarConfigRuido(c);
+        abrirModal('ruido-config-modal');
+    });
+}
+
+cfgRuidoUmbral.addEventListener('input', () => {
+    document.getElementById('cfg-ruido-umbral-valor').textContent = cfgRuidoUmbral.value + '%';
+});
+
+document.getElementById('btn-gardar-ruido').addEventListener('click', () => {
+    const umbral = parseInt(cfgRuidoUmbral.value, 10);
+    const duracion = parseInt(cfgRuidoDuracion.value, 10);
+    const resultado = document.getElementById('cfg-ruido-resultado');
+    if (!Number.isFinite(duracion)) {
+        resultado.textContent = t('web.config.ruido.erroduracion', '⚠ Indica a duración en segundos.');
+        return;
+    }
+    GardarRuidoConfig(umbral, duracion).then((c) => {
+        pintarConfigRuido(c);
+        currentUmbral = c.umbral;
+        document.getElementById('limiar').value = c.umbral;
+        document.getElementById('valorLimiar').textContent = c.umbral + '%';
+        resultado.textContent = t('web.config.ruido.gardado', '✅ Gardado: limiar {umbral}%, bloqueo de {duracion} s.')
+            .replace('{umbral}', c.umbral).replace('{duracion}', c.duracion);
+        log('[RUÍDO] ' + resultado.textContent);
+    });
 });
 
 // Interruptor manual do monitor de ruído (← chk_ruido/toggle_monitor de main.py).
@@ -1539,7 +1625,7 @@ document.querySelectorAll('[data-close]').forEach((b) => {
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
         cerrarSSH();
-        ['envio-modal', 'recollida-modal', 'explorer-modal', 'sobre-modal', 'bloqueo-config-modal', 'config-modal', 'scan-modal'].forEach(cerrarModal);
+        ['envio-modal', 'recollida-modal', 'explorer-modal', 'sobre-modal', 'bloqueo-config-modal', 'ruido-config-modal', 'config-modal', 'scan-modal'].forEach(cerrarModal);
     }
 });
 
@@ -1947,7 +2033,7 @@ function renderSeleccionManual(equipos) {
 
 document.querySelectorAll('input[name="destino"]').forEach((r) => {
     r.addEventListener('change', function () {
-        document.getElementById('seleccion-manual').style.display = this.value === 'seleccion' ? 'block' : 'none';
+        document.getElementById('seleccion-manual').style.display = this.value === 'seleccion' ? 'grid' : 'none';
     });
 });
 
@@ -1967,7 +2053,7 @@ document.getElementById('btn-enviar').addEventListener('click', abrirModalEnvio)
 function abrirModalEnvioPara(host) {
     abrirModalEnvio();
     document.querySelector('input[name="destino"][value="seleccion"]').checked = true;
-    document.getElementById('seleccion-manual').style.display = 'block';
+    document.getElementById('seleccion-manual').style.display = 'grid';
     document.querySelectorAll('.chk-equipo').forEach((c) => { c.checked = (c.value === host); });
 }
 
@@ -2090,6 +2176,14 @@ document.getElementById('sobre-web').addEventListener('click', (ev) => {
 // din que hai unha nova). Piztu péchase só e reábrese xa actualizado — non
 // hai que descargar nin descomprimir nada á man.
 document.getElementById('btn-sobre-actualizar').addEventListener('click', () => {
+    // A Release non trae o paquete de actualización en quente (piztu_*.zip):
+    // avísase igual, pero o único camiño é o instalador da páxina da Release.
+    if (actualizacionPiztu && !actualizacionPiztu.automatica) {
+        Browser.OpenURL(actualizacionPiztu.url_release || 'https://github.com/piztusistemas/Piztu/releases/latest');
+        log('[ACTUALIZACIÓN] ' + t('log.actualizacion.instalador',
+            'Esta versión instálase co instalador: ábrese a páxina de descarga.'));
+        return;
+    }
     if (!confirm(t('sobre.actualizar.confirmar',
         'Isto vai reiniciar Piztu para aplicar a actualización.\n\nPecharanse as sesións SSH abertas e calquera envío ou recollida en curso. ¿Continuar?'))) {
         return;

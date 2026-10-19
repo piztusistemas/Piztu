@@ -1,0 +1,156 @@
+---
+# publicar_filebrowser_80.yaml
+#
+# Publica un File Browser XA INSTALADO E CON DATOS no porto 80, detrás do proxy de
+# Apache, para que o alumnado escriba http://<servidor>/arquivos no canto de
+# http://<servidor>:8080.
+#
+# NON BORRA NADA. É a alternativa a reexecutar instalar_filebrowser.yaml, que purga
+# /etc/filebrowser/filebrowser.db (todas as contas) e recrea o cartafol de datos;
+# reinstalar para conseguir só o porto 80 custou unha vez todos os datos dun centro.
+# Aquí non hai ningunha tarefa que borre: só se engade configuración.
+#
+# Idempotente: pódese executar as veces que faga falta.
+# Para desfacelo:  a2disconf piztu-filebrowser && systemctl reload apache2
+#                  filebrowser config set --baseurl=/ --database=/etc/filebrowser/filebrowser.db
+#                  systemctl restart filebrowser
+#
+# Uso:  ansible-playbook playbooks/publicar_filebrowser_80.yaml
+
+- name: Publicar File Browser no porto 80 (sen tocar datos nin contas)
+  hosts: localhost
+  connection: local
+  become: yes
+  vars:
+    filebrowser_baseurl: "/arquivos"
+    filebrowser_port: 8080
+    filebrowser_db: /etc/filebrowser/filebrowser.db
+    filebrowser_bin: /usr/local/bin/filebrowser
+    # config.yaml de Piztu: a súa "filebrowser.url" ten que levar a mesma subruta, ou
+    # o servizo de historial de sesións deixaría de atinar coa API.
+    piztu_config: /opt/piztu/config.yaml
+
+  handlers:
+    - name: Reiniciar File Browser
+      systemd:
+        name: filebrowser
+        state: restarted
+
+    - name: Recargar Apache
+      systemd:
+        name: apache2
+        state: reloaded
+
+  tasks:
+    - name: 1. Comprobar que hai un File Browser instalado
+      stat:
+        path: "{{ item }}"
+      register: fb_ficheiros
+      loop:
+        - "{{ filebrowser_bin }}"
+        - "{{ filebrowser_db }}"
+
+    - name: 1b. Abortar se falta o binario ou a base de datos
+      fail:
+        msg: >
+          Non se atopa {{ item.item }}. Este playbook só configura un File Browser xa
+          instalado: para instalalo de cero usa o instalador de Piztu.
+      when: not item.stat.exists
+      loop: "{{ fb_ficheiros.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: 2. Comprobar que hai Apache (é quen publica o porto 80)
+      stat:
+        path: /usr/sbin/apache2
+      register: apache_bin
+
+    - name: 2b. Abortar se non hai Apache
+      fail:
+        msg: >
+          Non hai Apache neste servidor, así que non hai quen publique o porto 80.
+          Instala LAMP (paso 2 do instalador) e volve executar este playbook.
+      when: not apache_bin.stat.exists
+
+    - name: 3. Anotar a configuración actual de File Browser
+      # "config cat" só consulta, non modifica. Gárdase para comparar despois: así
+      # sábese se o cambio fixo algo de verdade e só se reinicia o servizo nese caso
+      # (executar isto dúas veces non debe cortarlle a sesión a ninguén).
+      command: "{{ filebrowser_bin }} config cat --database={{ filebrowser_db }}"
+      register: fb_antes
+      changed_when: false
+
+    - name: 4. Fixar a subruta pública de File Browser (--baseurl)
+      # Só toca a configuración: nin as contas nin os ficheiros se ven afectados.
+      command: >
+        {{ filebrowser_bin }} config set --database={{ filebrowser_db }}
+        --baseurl={{ filebrowser_baseurl }}
+      changed_when: false
+
+    - name: 5. Comprobar se a configuración cambiou (e reiniciar só se cambiou)
+      command: "{{ filebrowser_bin }} config cat --database={{ filebrowser_db }}"
+      register: fb_despois
+      changed_when: fb_despois.stdout != fb_antes.stdout
+      notify: Reiniciar File Browser
+
+    - name: 6. Activar os módulos de proxy de Apache
+      # proxy_wstunnel é para a consola/eventos de File Browser (websockets).
+      command: a2enmod proxy proxy_http proxy_wstunnel
+      register: apache_modulos
+      changed_when: "'Enabling' in apache_modulos.stdout"
+      notify: Recargar Apache
+
+    - name: 7. Escribir a configuración do proxy
+      copy:
+        dest: /etc/apache2/conf-available/piztu-filebrowser.conf
+        mode: '0644'
+        content: |
+          # Xerado por Piztu (playbooks/publicar_filebrowser_80.yaml). Non editar a man.
+          <IfModule mod_proxy.c>
+            ProxyPreserveHost On
+            # O websocket vai primeiro: a primeira regra que casa gaña.
+            ProxyPass {{ filebrowser_baseurl }}/api/command ws://127.0.0.1:{{ filebrowser_port }}{{ filebrowser_baseurl }}/api/command
+            ProxyPass {{ filebrowser_baseurl }} http://127.0.0.1:{{ filebrowser_port }}{{ filebrowser_baseurl }}
+            ProxyPassReverse {{ filebrowser_baseurl }} http://127.0.0.1:{{ filebrowser_port }}{{ filebrowser_baseurl }}
+          </IfModule>
+      notify: Recargar Apache
+
+    - name: 8. Activar a configuración do proxy
+      command: a2enconf piztu-filebrowser
+      register: apache_conf
+      changed_when: "'Enabling' in apache_conf.stdout"
+      notify: Recargar Apache
+
+    - name: 9. Aplicar xa os cambios pendentes (antes de comprobar que funciona)
+      meta: flush_handlers
+
+    - name: 10. Poñerlle a subruta á url de File Browser no config.yaml de Piztu
+      # Só se o ficheiro existe e a url non ten xa unha ruta: unha url "pelada"
+      # (http://host:porto) deixaría de atinar coa API en canto hai baseurl.
+      replace:
+        path: "{{ piztu_config }}"
+        regexp: '^(\s*url:\s*")(https?://[^/"]+)("\s*)$'
+        replace: '\1\2{{ filebrowser_baseurl }}\3'
+      when: piztu_config is file
+      register: piztu_cfg
+
+    - name: 11. Comprobar que a API responde polo porto 80
+      # /api/renew sen cabeceira X-Auth ten que dar 401: iso demostra que o proxy
+      # chega á API de verdade e non á páxina de Apache (que daría 404).
+      uri:
+        url: "http://127.0.0.1{{ filebrowser_baseurl }}/api/renew"
+        status_code: [401, 403]
+      register: proba
+      retries: 5
+      delay: 2
+      until: proba is succeeded
+
+    - name: Finalizado
+      debug:
+        msg: >
+          File Browser xa responde en http://{{ ansible_fqdn | default(inventory_hostname) }}{{ filebrowser_baseurl }}
+          (porto 80, vía Apache). Nin a base de contas nin os datos se tocaron.
+          {% if piztu_cfg is defined and piztu_cfg is changed %}
+          Actualizouse tamén a url de File Browser en {{ piztu_config }}.
+          {% endif %}
+          As contas de Tao que tiñan gardado o :8080 corrixiranse soas (Tao >= 26.9.12).

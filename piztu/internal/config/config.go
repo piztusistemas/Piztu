@@ -35,6 +35,7 @@ type Ruido struct {
 	UmbralDefecto       int  `yaml:"umbral_defecto"`
 	SegPromedio         int  `yaml:"seg_promedio"`
 	SegBloqueo          int  `yaml:"seg_bloqueo"`
+	SegDuracionBloqueo  int  `yaml:"seg_duracion_bloqueo"`
 	WarmupCiclos        int  `yaml:"warmup_ciclos"`
 	Rate                int  `yaml:"rate"`
 	Channels            int  `yaml:"channels"`
@@ -82,7 +83,11 @@ type Tao struct {
 // Filebrowser é o espello de FilebrowserConfig (core/settings.py): credenciais
 // e destino para o historial de sesións (ver internal/historial).
 type Filebrowser struct {
-	URL              string `yaml:"url"`
+	URL string `yaml:"url"`
+	// URLPublica é a URL coa que chegan ao File Browser deste servidor os
+	// EQUIPOS DA AULA (URL é a local, normalmente loopback). Déixase baleira
+	// case sempre: URLPublicaFileBrowser() dedúcea do nome de rede do servidor.
+	URLPublica       string `yaml:"url_publica"`
 	AdminUsuario     string `yaml:"admin_usuario"`
 	AdminContrasinal string `yaml:"admin_contrasinal"`
 	HistorialDir     string `yaml:"historial_dir"`
@@ -194,7 +199,7 @@ func porDefecto() *Config {
 		RemoteDesktopEN:   "/home/usuario/Desktop",
 		RemotePracticas:   "practicas",
 		Ruido: Ruido{
-			UmbralDefecto: 50, SegPromedio: 30, SegBloqueo: 30, WarmupCiclos: 20,
+			UmbralDefecto: 50, SegPromedio: 30, SegBloqueo: 30, SegDuracionBloqueo: 20, WarmupCiclos: 20,
 			Rate: 44100, Channels: 1, BytesPerSample: 2, ChunkMs: 300,
 			VerificarDesbloqueo: true, MaxReintentos: 5,
 			EsperaEntreIntentos: 15, EsperaInicial: 20,
@@ -215,7 +220,7 @@ func porDefecto() *Config {
 			CaducidadeSeg:   600,
 		},
 		Filebrowser: Filebrowser{
-			URL:          "http://127.0.0.1:8080",
+			URL:          "http://127.0.0.1:8080/arquivos",
 			AdminUsuario: "admin",
 			HistorialDir: "dixitalizacion/historial",
 			ConfirmarSeg: 300,

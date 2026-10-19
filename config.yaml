@@ -62,6 +62,8 @@ ruido:
   seg_promedio:      30      # segundos de ventá para a media móbil do ruído
   seg_bloqueo:       30      # segundos que o ruído debe persistir tras o aviso
                              # antes de bloquear todos os equipos
+  seg_duracion_bloqueo: 20   # segundos que os equipos quedan bloqueados polo
+                             # ruído antes de desbloquearse sós
   warmup_ciclos:     20      # ciclos de "quecemento" ignorados ao inicio (~6s)
   rate:              44100   # frecuencia de mostraxe (Hz)
   channels:          1
@@ -129,7 +131,7 @@ tao:
 # O contrasinal é o do usuario administrador de File Browser (mesmo usuario
 # creado en playbooks/instalar_lamp.yaml, tarefa 14).
 filebrowser:
-  url: "http://127.0.0.1:8080"
+  url: "http://127.0.0.1:8080/arquivos"
   admin_usuario: "admin"
   admin_contrasinal: ""
   historial_dir: "dixitalizacion/historial"   # relativo á raíz de File Browser

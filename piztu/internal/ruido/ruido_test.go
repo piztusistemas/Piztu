@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"piztu/internal/config"
 	"piztu/internal/motor"
@@ -51,7 +52,8 @@ func TestAudioQueuePopBaleiro(t *testing.T) {
 // non) aos equipos. Só implementa o que usa o monitor; o resto é relleno da
 // interface motor.Motor.
 type motorFalso struct {
-	accions []string
+	accions  []string
+	bloqueos []map[string]bool
 }
 
 func (m *motorFalso) Nome() string        { return "falso" }
@@ -60,7 +62,10 @@ func (m *motorFalso) ExecutarAccion(nomeLogico string, hosts []string, cb motor.
 	m.accions = append(m.accions, nomeLogico)
 	return nil
 }
-func (m *motorFalso) ExecutarBloqueo([]string, map[string]bool, motor.Callbacks) error { return nil }
+func (m *motorFalso) ExecutarBloqueo(_ []string, opcions map[string]bool, _ motor.Callbacks) error {
+	m.bloqueos = append(m.bloqueos, opcions)
+	return nil
+}
 func (m *motorFalso) EnviarFicheiros([]string, []string, motor.Callbacks) error        { return nil }
 func (m *motorFalso) LimparPracticas([]string, motor.Callbacks) error                  { return nil }
 func (m *motorFalso) RecollerPracticas([]string, motor.Callbacks) error                { return nil }
@@ -120,5 +125,50 @@ func TestDetenerDesarma(t *testing.T) {
 	mon.activo = true
 	if mon.Armado() {
 		t.Fatal("volver escoitar non debería rearmar o monitor")
+	}
+}
+
+// O bloqueo por ruído ten que pasar as opcións de bloqueo (rato e teclado):
+// sen elas o playbook non bloqueaba nada e os alumnos só vían o desbloqueo.
+func TestBloqueoPorRuidoPasaAsOpcions(t *testing.T) {
+	mon, m := monitorDeProba(t)
+	mon.modo = ConAccions
+
+	mon.bloquearAula()
+	if len(m.bloqueos) != 1 {
+		t.Fatalf("debería pedirse un bloqueo parametrizado; pedíronse %d", len(m.bloqueos))
+	}
+	if op := m.bloqueos[0]; !op["rato"] || !op["teclado"] {
+		t.Fatalf("o bloqueo por ruído debe bloquear rato e teclado; opcións = %v", op)
+	}
+	if len(m.accions) != 0 {
+		t.Fatalf("non se debería usar ExecutarAccion para bloquear; accións = %v", m.accions)
+	}
+}
+
+func TestBloqueoPorRuidoSenArmarNonBloquea(t *testing.T) {
+	mon, m := monitorDeProba(t)
+	mon.bloquearAula()
+	if len(m.bloqueos) != 0 {
+		t.Fatal("sen armar non se debería bloquear ningún equipo")
+	}
+}
+
+// A duración do bloqueo lese en cada bloqueo (⚙ Aula pode cambiala co monitor
+// en marcha); sen función, vale a de config.yaml.
+func TestDuracionBloqueoLeseEnCadaChamada(t *testing.T) {
+	mon, _ := monitorDeProba(t)
+	mon.cfg.Ruido.SegDuracionBloqueo = 20
+	if got := mon.duracionBloqueo(); got != 20*time.Second {
+		t.Fatalf("sen función, duracionBloqueo = %v, quería 20s", got)
+	}
+	seg := 30
+	mon.duracion = func() int { return seg }
+	if got := mon.duracionBloqueo(); got != 30*time.Second {
+		t.Fatalf("duracionBloqueo = %v, quería 30s", got)
+	}
+	seg = 45
+	if got := mon.duracionBloqueo(); got != 45*time.Second {
+		t.Fatalf("tras cambiar o valor, duracionBloqueo = %v, quería 45s", got)
 	}
 }

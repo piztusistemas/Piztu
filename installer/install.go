@@ -260,6 +260,24 @@ func permitirSaltSenSudo() error {
 	return nil
 }
 
+// engadirSubrutaArquivos devolve o valor YAML dunha url: de File Browser coa
+// subruta /arquivos engadida, ou "" se non hai nada que cambiar (xa ten ruta, ou
+// non se entende). Só toca URLs "peladas" do estilo http://host:porto.
+func engadirSubrutaArquivos(valorYAML string) string {
+	if i := strings.Index(valorYAML, " #"); i >= 0 {
+		valorYAML = strings.TrimSpace(valorYAML[:i]) // comentario á dereita
+	}
+	nu := strings.Trim(valorYAML, "\"'")
+	if nu == "" || !strings.HasPrefix(nu, "http") {
+		return ""
+	}
+	resto := nu[strings.Index(nu, "://")+3:]
+	if strings.Contains(resto, "/") {
+		return "" // xa ten ruta (/arquivos ou outra que puxo o profesorado)
+	}
+	return "\"" + nu + "/arquivos\""
+}
+
 // fixConfigFilebrowser garda en config.yaml as credenciais de File Browser que
 // acaba de crear o paso LAMP, para que o servizo de historial de sesións (ver
 // instalarServizoHistorial) poida autenticarse na súa API. Se config.yaml xa
@@ -277,10 +295,23 @@ func fixConfigFilebrowser(fbUser, fbPass string) error {
 
 	lines := strings.Split(string(data), "\n")
 	tenSeccion, achouUsuario, achouContrasinal := false, false, false
+	dentroSeccion := false
 	for i, line := range lines {
 		t := strings.TrimSpace(line)
 		if t == "filebrowser:" {
 			tenSeccion = true
+			dentroSeccion = true
+		} else if t != "" && !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") {
+			dentroSeccion = false // outra sección de primeiro nivel
+		}
+		// File Browser pasou a servirse baixo a subruta /arquivos (o --baseurl
+		// que lle pon playbooks/instalar_filebrowser.yaml, para poder publicalo
+		// no porto 80 detrás de Apache). Unha URL antiga, sen subruta ningunha,
+		// daría 404 en todas as chamadas á API: migrámola aquí.
+		if dentroSeccion && strings.HasPrefix(t, "url:") {
+			if migrada := engadirSubrutaArquivos(strings.TrimSpace(t[len("url:"):])); migrada != "" {
+				lines[i] = "  url: " + migrada
+			}
 		}
 		if strings.HasPrefix(t, "admin_usuario:") {
 			lines[i] = "  admin_usuario: \"" + escapar(fbUser) + "\""
@@ -299,7 +330,7 @@ func fixConfigFilebrowser(fbUser, fbPass string) error {
 	// engadir unha sección completa e autocontida ao final do ficheiro.
 	bloque := fmt.Sprintf(
 		"\nfilebrowser:\n"+
-			"  url: \"http://127.0.0.1:8080\"\n"+
+			"  url: \"http://127.0.0.1:8080/arquivos\"\n"+
 			"  admin_usuario: \"%s\"\n"+
 			"  admin_contrasinal: \"%s\"\n"+
 			"  historial_dir: \"dixitalizacion/historial\"\n"+

@@ -15,5 +15,6 @@ export {
     IdiomaInfo,
     ModuloInfo,
     MotorInfo,
-    PanelResposta
+    PanelResposta,
+    RuidoConfig
 } from "./models.js";

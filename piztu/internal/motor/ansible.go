@@ -110,9 +110,14 @@ func (m *MotorAnsible) InstalarTaoClientes(hosts []string, taoSrc, taoIconSrc st
 	}
 	defer os.Remove(inv)
 
+	// servidor_url: a URL pública do File Browser deste servidor, que o playbook
+	// deixa escrita en cada cliente para que Tao a amose por defecto na pantalla
+	// de acceso (ver config.URLPublicaFileBrowser). Se non se pode deducir vai
+	// baleira e o playbook non toca nada.
 	extraVars, err := json.Marshal(map[string]string{
 		"tao_src":      taoSrc,
 		"tao_icon_src": taoIconSrc,
+		"servidor_url": m.cfg.URLPublicaFileBrowser(),
 	})
 	if err != nil {
 		return err

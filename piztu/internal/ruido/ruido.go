@@ -58,10 +58,11 @@ const (
 // Sempre usa o motor Ansible: ruido.py orixinal nunca pasaba pola
 // abstracción de motor.Get, chamaba "ansible-playbook" directamente.
 type Monitor struct {
-	cfg    *config.Config
-	m      motor.Motor
-	ev     Eventos
-	umbral func() int
+	cfg      *config.Config
+	m        motor.Motor
+	ev       Eventos
+	umbral   func() int
+	duracion func() int // segundos de bloqueo por ruído; nil → config.yaml
 
 	mu       sync.Mutex
 	activo   bool
@@ -69,11 +70,21 @@ type Monitor struct {
 	cancelar context.CancelFunc
 }
 
-// Novo crea un Monitor. umbral debe ler o limiar vixente en cada chamada
+// Novo crea un Monitor. umbral e duracion deben ler o valor vixente en cada chamada
 // (ex. a.store.LerUmbral) para que os cambios feitos na UI xurdan efecto
 // sen reiniciar o monitor.
-func Novo(cfg *config.Config, umbral func() int, ev Eventos) *Monitor {
-	return &Monitor{cfg: cfg, m: motor.Get(cfg, "ansible"), ev: ev, umbral: umbral}
+func Novo(cfg *config.Config, umbral, duracion func() int, ev Eventos) *Monitor {
+	return &Monitor{cfg: cfg, m: motor.Get(cfg, "ansible"), ev: ev, umbral: umbral, duracion: duracion}
+}
+
+// duracionBloqueo le a duración vixente en cada bloqueo, igual que o limiar:
+// un cambio feito en ⚙ Aula vale para o seguinte bloqueo sen reiniciar nada.
+func (mon *Monitor) duracionBloqueo() time.Duration {
+	seg := mon.cfg.Ruido.SegDuracionBloqueo
+	if mon.duracion != nil {
+		seg = mon.duracion()
+	}
+	return time.Duration(seg) * time.Second
 }
 
 // Iniciar arranca a captura e o bucle principal nunha goroutine, se non
@@ -270,8 +281,8 @@ func (mon *Monitor) bucle(ctx context.Context) {
 	defer ticker.Stop()
 
 	if mon.Armado() {
-		println(fmt.Sprintf("--- 🎙️ Control de Ruído ARMADO (Media %ds · bloqueo tras %ds) ---",
-			r.SegPromedio, r.SegBloqueo))
+		println(fmt.Sprintf("--- 🎙️ Control de Ruído ARMADO (Media %ds · bloqueo tras %ds, durante %ds) ---",
+			r.SegPromedio, r.SegBloqueo, r.SegDuracionBloqueo))
 	} else {
 		println("--- 🎙️ Micrófono a escoitar SÓ PARA O VÚMETRO (sen accións na aula) ---")
 	}
@@ -336,12 +347,15 @@ func (mon *Monitor) bucle(ctx context.Context) {
 			case 1:
 				if agora.Sub(tAviso) >= time.Duration(r.SegBloqueo)*time.Second {
 					estadoAlerta = 2
-					mon.dispararAsync("bloqueo")
+					mon.vumetro(Estado{Nivel: nivelInstan, NivelMedio: nivelMedio, Estado: estadoAlerta})
+					// Síncrono: a conta da duración empeza cando os equipos
+					// xa están bloqueados, non mentres Ansible aínda conecta.
+					mon.bloquearAula()
 
 					select {
 					case <-ctx.Done():
 						return
-					case <-time.After(60 * time.Second):
+					case <-time.After(mon.duracionBloqueo()):
 					}
 
 					mon.dispararSync("liberar")
@@ -381,6 +395,27 @@ func (mon *Monitor) dispararAsync(nomeLogico string) {
 		return
 	}
 	go mon.m.ExecutarAccion(nomeLogico, hosts, motor.Callbacks{})
+}
+
+// opcionsBloqueoRuido é o que bloquea o control de ruído: rato e teclado, que
+// é o que fai aparecer o aviso "EQUIPO BLOQUEADO" nos clientes. Internet, SSH
+// e son quedan como están — o castigo é deixar de traballar uns segundos, non
+// cortar a rede no medio dunha práctica.
+var opcionsBloqueoRuido = map[string]bool{"rato": true, "teclado": true}
+
+// bloquearAula bloquea todos os equipos e agarda a que remate. Pasa polo
+// ExecutarBloqueo parametrizado e non por ExecutarAccion("bloqueo"): o
+// playbook de bloqueo espera recibir as opcións coma extra-vars, e sen elas
+// Ansible non bloqueaba nada e os alumnos só vían o aviso de desbloqueo.
+func (mon *Monitor) bloquearAula() {
+	if !mon.armado() {
+		return
+	}
+	hosts := mon.todosHosts()
+	if len(hosts) == 0 {
+		return
+	}
+	_ = mon.m.ExecutarBloqueo(hosts, opcionsBloqueoRuido, motor.Callbacks{})
 }
 
 // dispararSync lanza a acción e agarda a que remate en todos os hosts

@@ -879,11 +879,16 @@ input[type="range"] { cursor: pointer; accent-color: var(--unlock); height: 4px;
 .destino-box { margin-bottom: 14px; font-size: 0.85rem; }
 .lbl-destino { font-weight: 600; margin-right: 8px; }
 .destino-box label { margin-right: 12px; }
+/* Grid, not CSS columns: with a capped height, columns overflow sideways and
+   the horizontal scrollbar covered the last row of hosts. */
 #seleccion-manual {
-    display: none; margin-top: 8px; columns: 2; column-gap: 8px;
-    font-size: 0.8rem; max-height: 100px; overflow-y: auto;
+    display: none; margin-top: 8px;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    column-gap: 8px; row-gap: 2px;
+    font-size: 0.8rem; max-height: 140px;
+    overflow-y: auto; overflow-x: hidden; padding-bottom: 6px;
 }
-#seleccion-manual label { display: block; white-space: nowrap; margin-bottom: 2px; }
+#seleccion-manual label { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .lista-descubertos {
     margin-top: 10px; max-height: 220px; overflow-y: auto;

@@ -276,6 +276,19 @@ export function GardarOpcionsBloqueo(opcions) {
 }
 
 /**
+ * GardarRuidoConfig persiste o limiar e a duración (acoutados) e devolve o que
+ * quedou gardado. O monitor lé os dous en cada ciclo, así que valen ao momento.
+ * @param {number} umbral
+ * @param {number} duracion
+ * @returns {$CancellablePromise<$models.RuidoConfig>}
+ */
+export function GardarRuidoConfig(umbral, duracion) {
+    return $Call.ByID(1717527583, umbral, duracion).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType4($result);
+    }));
+}
+
+/**
  * @param {number} v
  * @returns {$CancellablePromise<void>}
  */
@@ -290,7 +303,7 @@ export function GardarUmbral(v) {
  */
 export function GetActualizacionPiztu() {
     return $Call.ByID(1176469992).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType4($result);
+        return $$createType5($result);
     }));
 }
 
@@ -301,7 +314,7 @@ export function GetActualizacionPiztu() {
  */
 export function GetAulaConfig() {
     return $Call.ByID(2861853712).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType5($result);
+        return $$createType6($result);
     }));
 }
 
@@ -311,7 +324,7 @@ export function GetAulaConfig() {
  */
 export function GetEquipos() {
     return $Call.ByID(380500691).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType7($result);
+        return $$createType8($result);
     }));
 }
 
@@ -323,7 +336,7 @@ export function GetEquipos() {
  */
 export function GetEstadoTao() {
     return $Call.ByID(3600699887).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType9($result);
+        return $$createType10($result);
     }));
 }
 
@@ -341,7 +354,7 @@ export function GetMotor() {
  */
 export function GetOpcionsBloqueo() {
     return $Call.ByID(450801743).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType10($result);
+        return $$createType11($result);
     }));
 }
 
@@ -353,7 +366,18 @@ export function GetOpcionsBloqueo() {
  */
 export function GetPublicacions() {
     return $Call.ByID(290261777).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType11($result);
+        return $$createType12($result);
+    }));
+}
+
+/**
+ * GetRuidoConfig devolve o limiar e a duración do bloqueo vixentes, cos
+ * límites que acepta GardarRuidoConfig (para que a UI non os repita).
+ * @returns {$CancellablePromise<$models.RuidoConfig>}
+ */
+export function GetRuidoConfig() {
+    return $Call.ByID(1630196954).then(/** @type {($result: any) => any} */(($result) => {
+        return $$createType4($result);
     }));
 }
 
@@ -380,7 +404,7 @@ export function Idioma() {
  */
 export function IdiomasDisponibles() {
     return $Call.ByID(1592057939).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType13($result);
+        return $$createType14($result);
     }));
 }
 
@@ -462,7 +486,7 @@ export function LimparPracticas(destinos) {
  */
 export function ListarFicheiros(host) {
     return $Call.ByID(3269305554, host).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType14($result);
+        return $$createType15($result);
     }));
 }
 
@@ -473,7 +497,7 @@ export function ListarFicheiros(host) {
  */
 export function ModulosDispo() {
     return $Call.ByID(1629645069).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType16($result);
+        return $$createType17($result);
     }));
 }
 
@@ -495,7 +519,7 @@ export function MotorBase() {
  */
 export function MotoresDispo() {
     return $Call.ByID(660477615).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType18($result);
+        return $$createType19($result);
     }));
 }
 
@@ -505,7 +529,7 @@ export function MotoresDispo() {
  */
 export function PanelModulo(id) {
     return $Call.ByID(19474263, id).then(/** @type {($result: any) => any} */(($result) => {
-        return $$createType20($result);
+        return $$createType21($result);
     }));
 }
 
@@ -650,20 +674,21 @@ const $$createType0 = $models.AccionInfo.createFrom;
 const $$createType1 = $Create.Array($$createType0);
 const $$createType2 = $Create.Map($Create.Any, $Create.Any);
 const $$createType3 = $Create.Array($Create.Any);
-const $$createType4 = actualizacion$0.Estado.createFrom;
-const $$createType5 = $models.AulaConfig.createFrom;
-const $$createType6 = $models.Equipo.createFrom;
-const $$createType7 = $Create.Array($$createType6);
-const $$createType8 = tao$0.Sesion.createFrom;
-const $$createType9 = $Create.Map($Create.Any, $$createType8);
-const $$createType10 = $Create.Map($Create.Any, $Create.Any);
-const $$createType11 = $Create.Map($Create.Any, $$createType2);
-const $$createType12 = $models.IdiomaInfo.createFrom;
-const $$createType13 = $Create.Array($$createType12);
-const $$createType14 = $Create.Map($Create.Any, $Create.Any);
-const $$createType15 = $models.ModuloInfo.createFrom;
-const $$createType16 = $Create.Array($$createType15);
-const $$createType17 = $models.MotorInfo.createFrom;
-const $$createType18 = $Create.Array($$createType17);
-const $$createType19 = $models.PanelResposta.createFrom;
-const $$createType20 = $Create.Nullable($$createType19);
+const $$createType4 = $models.RuidoConfig.createFrom;
+const $$createType5 = actualizacion$0.Estado.createFrom;
+const $$createType6 = $models.AulaConfig.createFrom;
+const $$createType7 = $models.Equipo.createFrom;
+const $$createType8 = $Create.Array($$createType7);
+const $$createType9 = tao$0.Sesion.createFrom;
+const $$createType10 = $Create.Map($Create.Any, $$createType9);
+const $$createType11 = $Create.Map($Create.Any, $Create.Any);
+const $$createType12 = $Create.Map($Create.Any, $$createType2);
+const $$createType13 = $models.IdiomaInfo.createFrom;
+const $$createType14 = $Create.Array($$createType13);
+const $$createType15 = $Create.Map($Create.Any, $Create.Any);
+const $$createType16 = $models.ModuloInfo.createFrom;
+const $$createType17 = $Create.Array($$createType16);
+const $$createType18 = $models.MotorInfo.createFrom;
+const $$createType19 = $Create.Array($$createType18);
+const $$createType20 = $models.PanelResposta.createFrom;
+const $$createType21 = $Create.Nullable($$createType20);

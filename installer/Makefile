@@ -11,13 +11,23 @@ DIST_BINARY = Piztu_Debian_installer
 ## build: Compila o instalador (require Go, wails e node/npm)
 ## Fronte da propia interface do instalador (frontend/) — non confundir con
 ## "files", que empaqueta o Piztu que se instala.
-build: check-go check-wails assets/logo.png build/appicon.png files
+build: check-go check-wails VERSION assets/logo.png build/appicon.png files
 	go mod tidy
 	wails build
 	@mv build/bin/$(BINARY) build/bin/$(DIST_BINARY)
+	@# Paquete de actualización en quente: súbese á Release XUNTO ao instalador,
+	@# ou as aulas xa instaladas só poderán reinstalar (ver o propio script).
+	@./empaquetar_actualizacion.sh files/piztu build/bin
 	@echo ""
 	@echo "✅ Compilado: ./installer/build/bin/$(DIST_BINARY)"
+	@echo "   Sube á Release os tres: $(DIST_BINARY), piztu_<versión>.zip e .zip.sha256"
 	@echo "   Executa con:  sudo ./installer/build/bin/$(DIST_BINARY)"
+
+## VERSION: a versión que amosa o instalador na columna da esquerda é a de
+## Piztu (publícanse sempre xuntos). Cópiase da que embebe Piztu para que
+## subir a versión de Piztu abonde: o instalador adáptase só ao compilar.
+VERSION: ../piztu/internal/actualizacion/VERSION
+	@cp ../piztu/internal/actualizacion/VERSION VERSION
 
 ## assets/logo.png: Copia o logo dende o directorio pai
 ## Depende de ../logo.png (non abondaba con "assets/logo.png:" sen prerequisito:

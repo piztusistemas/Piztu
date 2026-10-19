@@ -515,7 +515,13 @@ func (a *App) configurarRuido() {
 		}
 		return a.store.LerUmbral()
 	}
-	a.ruido = ruido.Novo(a.cfg, umbralFn, ruido.Eventos{
+	duracionFn := func() int {
+		if a.store == nil {
+			return a.cfg.Ruido.SegDuracionBloqueo
+		}
+		return a.store.LerDuracionBloqueoRuido()
+	}
+	a.ruido = ruido.Novo(a.cfg, umbralFn, duracionFn, ruido.Eventos{
 		OnVumetro: func(e ruido.Estado) {
 			emitirEvento("ruido_actual", map[string]any{
 				"nivel": e.Nivel, "nivel_medio": e.NivelMedio, "estado": e.Estado,
@@ -962,8 +968,11 @@ func (a *App) GetActualizacionPiztu() actualizacion.Estado {
 // intre con dúas copias de Piztu abertas á vez.
 func (a *App) AplicarActualizacionPiztu() error {
 	estado := a.GetActualizacionPiztu()
-	if !estado.Disponible || estado.URLDescarga == "" {
+	if !estado.Disponible {
 		return fmt.Errorf("non hai ningunha actualización de Piztu dispoñible")
+	}
+	if !estado.Automatica || estado.URLDescarga == "" {
+		return fmt.Errorf("a versión %s non trae paquete de actualización automática: descarga o instalador desde %s", estado.VersionRemota, estado.URLRelease)
 	}
 	if err := actualizacion.AplicarEnCaliente(estado.URLDescarga, estado.URLChecksum); err != nil {
 		return err
@@ -2149,6 +2158,41 @@ func (a *App) GardarUmbral(v int) {
 		return
 	}
 	a.store.GardarUmbral(v)
+}
+
+// RuidoConfig é o que amosa e garda o configurador de ruído de ⚙ Aula.
+type RuidoConfig struct {
+	Umbral      int `json:"umbral"`   // % de nivel medio que dispara o aviso
+	Duracion    int `json:"duracion"` // segundos que dura o bloqueo por ruído
+	UmbralMin   int `json:"umbralMin"`
+	UmbralMax   int `json:"umbralMax"`
+	DuracionMin int `json:"duracionMin"`
+	DuracionMax int `json:"duracionMax"`
+}
+
+// GetRuidoConfig devolve o limiar e a duración do bloqueo vixentes, cos
+// límites que acepta GardarRuidoConfig (para que a UI non os repita).
+func (a *App) GetRuidoConfig() RuidoConfig {
+	c := RuidoConfig{
+		Umbral: a.cfg.Ruido.UmbralDefecto, Duracion: a.cfg.Ruido.SegDuracionBloqueo,
+		UmbralMin: db.UmbralMin, UmbralMax: db.UmbralMax,
+		DuracionMin: db.DuracionBloqueoMin, DuracionMax: db.DuracionBloqueoMax,
+	}
+	if a.store != nil {
+		c.Umbral = a.store.LerUmbral()
+		c.Duracion = a.store.LerDuracionBloqueoRuido()
+	}
+	return c
+}
+
+// GardarRuidoConfig persiste o limiar e a duración (acoutados) e devolve o que
+// quedou gardado. O monitor lé os dous en cada ciclo, así que valen ao momento.
+func (a *App) GardarRuidoConfig(umbral, duracion int) RuidoConfig {
+	if a.store != nil {
+		a.store.GardarUmbral(db.AcoutarUmbral(umbral))
+		a.store.GardarDuracionBloqueoRuido(duracion)
+	}
+	return a.GetRuidoConfig()
 }
 
 // GardarLayout persiste a posición dun equipo (← /gardar_layout).
