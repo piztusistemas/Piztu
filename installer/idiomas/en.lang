@@ -94,6 +94,8 @@ filebrowser.erro = \n❌ Error: %s
 filebrowser.ok = \n✅ File Browser installed! Access it at http://localhost/arquivos (from the classroom, http://<server-name>/arquivos) with user "%s".
 filebrowser.log.grupo = ⚠️  "%s" was added to the www-data group (to read Tao sessions). Log out and back in (or reboot) for this to take effect.
 filebrowser.errofilebrowsercfg = ⚠️  Could not save File Browser credentials to config.yaml: %s
+filebrowser.admintao.ok = ✅ Updated the File Browser administrator credentials saved in Tao (admin.json).
+filebrowser.erroadmintao = ⚠️  Could not update Tao's admin.json: %s
 filebrowser.historial.ok = ✅ Session history service (piztu-historial) installed and enabled.
 filebrowser.historial.erro = ⚠️  Could not install the session history service: %s
 

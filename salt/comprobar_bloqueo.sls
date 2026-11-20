@@ -11,6 +11,9 @@
 
 comprobar_procesos_bloqueo:
   cmd.run:
+{% if grains.get('os_family') == 'Windows' or 'cmd.exe' in grains.get('shell', '')|lower %}
+    - name: 'if exist "%ProgramData%\piztu_bloqueo.flag" (echo BLOQUEADO:aviso) else (netsh advfirewall firewall show rule name=PIZTU_BLOQUEO >nul 2>&1 && echo BLOQUEADO:rede || echo LIBRE)'
+{% else %}
     - name: |
         if [ -f /tmp/piztu_bloqueo.pid ] && kill -0 "$(cat /tmp/piztu_bloqueo.pid)" 2>/dev/null; then
           echo "BLOQUEADO:pid"
@@ -23,3 +26,4 @@ comprobar_procesos_bloqueo:
           fi
         done
         echo "LIBRE"
+{% endif %}

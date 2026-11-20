@@ -19,9 +19,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -33,18 +36,47 @@ import (
 // now é substituíble nos tests para simular o paso do tempo sen esperar de verdade.
 var now = time.Now
 
-// ── Cliente mínimo da API de File Browser ───────────────────────────────────
+// ── Cliente mínimo da API de File Browser Quantum ───────────────────────────
+//
+// Quantum non é un fork compatible do File Browser clásico (contrato comprobado contra
+// a v1.5.6): o login é POST /api/auth/login?username=… co contrasinal codificado na
+// cabeceira X-Password (devolve o JWT en texto plano, que despois vai como Bearer), e
+// as rutas van na query (?source=…&path=/a/b), non na URL.
+
+// fbSource é o nome da "source" de Quantum (server.sources[].name no seu config.yaml)
+// que contén cfg.Filebrowser.HistorialDir; a instalación crea exactamente esta, a mesma
+// que usan tao/ e pancho/.
+const fbSource = "arquivos"
+
+// cabeceiraContrasinal codifica o contrasinal para X-Password, que Quantum descodifica
+// como URL: un "ñ" ou un "%" en crú tomaríase por contrasinal erróneo. O espazo vai como
+// %20 (non "+") para que valga igual se o servidor o trata como query ou como ruta.
+func cabeceiraContrasinal(contrasinal string) string {
+	return strings.ReplaceAll(url.QueryEscape(contrasinal), "+", "%20")
+}
 
 type clienteFilebrowser struct {
 	cfg *config.Config
 
 	mu    sync.Mutex
 	token string
+	// bloqueadoAte: Quantum bloqueou a conta polo bloqueo de intentos fallidos (ver
+	// loginUnha); ata entón non se volve chamar ao login (só o agravaría).
+	bloqueadoAte time.Time
 }
 
 func novoCliente(cfg *config.Config) *clienteFilebrowser {
 	return &clienteFilebrowser{cfg: cfg}
 }
+
+// loginIntentos é canto tenta login cando Quantum responde 429. Quantum limita os accesos
+// a unhas 8 ás de golpe por IP (despois 429 con "Retry-After: 6") e ignora
+// X-Forwarded-For: co proxy Apache toda a aula é un só cliente, e ao comezo da clase o
+// alumnado gasta a ráfaga. Sen agardar, o historial dese intre quedaría sen subir.
+const loginIntentos = 4
+
+// durmir é time.Sleep, substituíble nos tests.
+var durmir = time.Sleep
 
 func (c *clienteFilebrowser) login() string {
 	fb := c.cfg.Filebrowser
@@ -53,26 +85,66 @@ func (c *clienteFilebrowser) login() string {
 			"o historial gárdase só localmente.")
 		return ""
 	}
-	corpo, _ := json.Marshal(map[string]string{
-		"username": fb.AdminUsuario,
-		"password": fb.AdminContrasinal,
-	})
-	resp, err := http.Post(strings.TrimRight(fb.URL, "/")+"/api/login", "application/json", bytes.NewReader(corpo))
-	if err != nil {
-		fmt.Printf("[HISTORIAL] ❌ Non se puido iniciar sesión en File Browser: %v\n", err)
+	if time.Now().Before(c.bloqueadoAte) {
 		return ""
 	}
+	for intento := 1; ; intento++ {
+		token, espera, bloqueo := c.loginUnha()
+		if bloqueo > 0 {
+			c.bloqueadoAte = time.Now().Add(bloqueo)
+			fmt.Printf("[HISTORIAL] ❌ File Browser bloqueou a conta %q por intentos fallidos de contrasinal (uns %d min): "+
+				"non se reintenta ata entón. Comproba que ninguén (Tao, outro equipo) use un contrasinal antigo deste usuario.\n",
+				fb.AdminUsuario, int(bloqueo.Minutes()))
+			return ""
+		}
+		if espera == 0 || intento >= loginIntentos {
+			return token
+		}
+		fmt.Printf("[HISTORIAL] Quantum limita os accesos (429); reintento %d/%d en %v\n", intento, loginIntentos-1, espera)
+		durmir(espera)
+	}
+}
+
+// loginUnha é un intento de login. Unha espera non nula significa que Quantum pediu ir máis
+// amodo (429 de ráfaga, con "Retry-After" curto). Un bloqueo non nulo é outra cousa: o
+// bloqueo da conta por intentos fallidos (429 "too many failed authentication attempts"
+// con Retry-After de 15 min), que afecta tamén aos logins CORRECTOS e non se supera
+// agardando uns segundos.
+func (c *clienteFilebrowser) loginUnha() (string, time.Duration, time.Duration) {
+	fb := c.cfg.Filebrowser
+	req, err := http.NewRequest(http.MethodPost,
+		strings.TrimRight(fb.URL, "/")+"/api/auth/login?username="+url.QueryEscape(fb.AdminUsuario), nil)
+	if err != nil {
+		return "", 0, 0
+	}
+	req.Header.Set("X-Password", cabeceiraContrasinal(fb.AdminContrasinal))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		fmt.Printf("[HISTORIAL] ❌ Non se puido iniciar sesión en File Browser: %v\n", err)
+		return "", 0, 0
+	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusTooManyRequests {
+		n, _ := strconv.Atoi(resp.Header.Get("Retry-After"))
+		cru, _ := io.ReadAll(resp.Body)
+		if n > 30 || strings.Contains(string(cru), "failed authentication") {
+			return "", 0, time.Duration(max(n, 60)) * time.Second
+		}
+		espera := 6 * time.Second
+		if n > 0 {
+			espera = time.Duration(n) * time.Second
+		}
+		return "", espera, 0
+	}
 	if resp.StatusCode != http.StatusOK {
 		fmt.Printf("[HISTORIAL] ❌ Login en File Browser devolveu %d\n", resp.StatusCode)
-		return ""
+		return "", 0, 0
 	}
 	buf := new(bytes.Buffer)
 	if _, err := buf.ReadFrom(resp.Body); err != nil {
-		return ""
+		return "", 0, 0
 	}
-	token := strings.Trim(strings.TrimSpace(buf.String()), `"`)
-	return token
+	return strings.Trim(strings.TrimSpace(buf.String()), `"`), 0, 0
 }
 
 func (c *clienteFilebrowser) obterToken() string {
@@ -92,12 +164,15 @@ func (c *clienteFilebrowser) escribirFicheiro(rutaRelativa string, contido []byt
 		if token == "" {
 			return false
 		}
-		url := fmt.Sprintf("%s/api/resources/%s?override=true", strings.TrimRight(fb.URL, "/"), rutaRelativa)
-		req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(contido))
+		q := url.Values{}
+		q.Set("source", fbSource)
+		q.Set("path", "/"+strings.Trim(rutaRelativa, "/"))
+		q.Set("override", "true")
+		destino := strings.TrimRight(fb.URL, "/") + "/api/resources?" + q.Encode()
+		req, err := http.NewRequest(http.MethodPost, destino, bytes.NewReader(contido))
 		if err != nil {
 			return false
 		}
-		req.Header.Set("X-Auth", token)
 		req.Header.Set("Authorization", "Bearer "+token)
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {

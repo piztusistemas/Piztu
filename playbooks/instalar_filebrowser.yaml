@@ -1,5 +1,19 @@
 ---
-- name: Instalar File Browser
+# Instala File Browser QUANTUM (https://github.com/gtsteffaniak/filebrowser), non o File
+# Browser clásico: son proxectos distintos con API distinta. Os módulos de Piztu (tao/,
+# pancho/, piztu/internal/historial) falan o protocolo de Quantum.
+#
+# Diferenzas co clásico que condicionan este playbook (todas comprobadas contra a v1.5.6):
+#   - Non hai CLI (`filebrowser config set`, `users add`): TODO vai nun config.yaml.
+#   - O binario publícase solto en GitHub (sen tar.gz) con SHA-256; fíxase aquí abaixo.
+#   - `auth.adminPassword` restablece o contrasinal do admin en CADA arranque, mentres
+#     a liña exista: por iso só se deixa para o primeiro arranque e despois quítase.
+#   - Sen `useLogicalSize`, Quantum devolve os tamaños redondeados a bloques de 4 KB e
+#     Tao (fbXaSubido) non pode saber se un ficheiro xa subiu comparando bytes.
+#   - Quantum limita os logins (~8 ás de golpe por IP, despois 429) e ignora
+#     X-Forwarded-For: co proxy de Apache toda a aula é un só cliente. Os clientes de
+#     Piztu xa agardan o Retry-After; non hai forma de configuralo no servidor.
+- name: Instalar File Browser Quantum
   hosts: localhost
   connection: local
   become: yes
@@ -7,17 +21,27 @@
     # Credenciais do administrador de File Browser
     filebrowser_admin_user: "admin"
     filebrowser_admin_pass: "changeme"
-    # Axustes opcionais
-    filebrowser_version: "v2.63.18"
+    # Versión do binario e o seu SHA-256 (asset linux-amd64-filebrowser da release
+    # https://github.com/gtsteffaniak/filebrowser/releases/tag/v1.5.6-stable). Se se
+    # cambia a versión hai que cambiar tamén o hash, ou a descarga rexéitase.
+    filebrowser_version: "v1.5.6-stable"
+    filebrowser_sha256: "febf1ded3368eac1f13481f413db272c57678b70f09e74f5513d5e25e0bfb0e5"
     filebrowser_port: 8080
     # Subruta pública: File Browser segue a escoitar no 8080, pero Apache (porto
     # 80) reenvíalle todo o que colgue de {{ filebrowser_baseurl }}, así o
     # alumnado entra nun http://<servidor>/arquivos en vez de aprender un
-    # http://<servidor>:8080. Ten que coincidir co --baseurl do propio File
-    # Browser: sen el, os enlaces absolutos que xera (/static, /api) sairían da
+    # http://<servidor>:8080. Ten que coincidir co server.baseURL do config.yaml de
+    # Quantum: sen el, os enlaces absolutos que xera (/static, /api) sairían da
     # subruta e a interface non cargaría detrás do proxy.
     filebrowser_baseurl: "/arquivos"
     filebrowser_root: "/var/www/html/arquivos"
+    # Nome da "source" de Quantum: é o `source=` que levan TODAS as chamadas á API
+    # (tao/filebrowser.go: fbSource, o mesmo en pancho/ e no historial). Non cambialo.
+    filebrowser_source: "arquivos"
+    filebrowser_config: /etc/filebrowser/config.yaml
+    filebrowser_db: /etc/filebrowser/filebrowser.db
+    # Cartafol de traballo e de caché (miniaturas, índices): escribible polo servizo.
+    filebrowser_state: /var/lib/filebrowser
     # Usuario do sistema que executa Piztu (app.py/main.py). Se se indica, engádese
     # ao grupo www-data para que poida LER o cartafol compartido que crea File
     # Browser (dixitalizacion/, permisos 750 www-data:www-data) — necesario para
@@ -29,37 +53,35 @@
     # Require un servidor web xa activo en /var/www/html (instalado por este
     # instalador no paso "LAMP" ou previamente por outra vía) e o usuario/grupo
     # www-data, que xa ven de fábrica en calquera Debian.
-    - name: 1. Descargar o binario de File Browser
-      get_url:
-        url: "https://github.com/filebrowser/filebrowser/releases/download/{{ filebrowser_version }}/linux-amd64-filebrowser.tar.gz"
-        dest: /tmp/filebrowser.tar.gz
-        mode: '0644'
-
-    - name: 2. Deter o servizo filebrowser se xa existía (para reconfigurar sen conflitos)
+    - name: 1. Deter o servizo filebrowser se xa existía (para reconfigurar sen conflitos)
       command: systemctl stop filebrowser
       ignore_errors: yes
       changed_when: false
 
-    - name: 3. Extraer o binario filebrowser en /usr/local/bin
-      command: tar -xzf /tmp/filebrowser.tar.gz -C /usr/local/bin/ filebrowser
-      changed_when: true
-
-    - name: 4. Eliminar o arquivo tar.gz temporal
-      file:
-        path: /tmp/filebrowser.tar.gz
-        state: absent
-
-    - name: 5. Facer executable o binario filebrowser
-      file:
-        path: /usr/local/bin/filebrowser
+    - name: 2. Descargar o binario de File Browser Quantum (co SHA-256 fixado)
+      get_url:
+        url: "https://github.com/gtsteffaniak/filebrowser/releases/download/{{ filebrowser_version }}/linux-amd64-filebrowser"
+        dest: /usr/local/bin/filebrowser
+        checksum: "sha256:{{ filebrowser_sha256 }}"
         mode: '0755'
+        owner: root
+        group: root
+        force: yes
 
-    - name: 6. Purgar a base de datos anterior de File Browser
+    - name: 3. Purgar a base de datos e a configuración anteriores de File Browser
+      # Reinstalar parte de cero: contas, regras de acceso e config. Vale tanto para
+      # unha instalación previa de Quantum coma para o File Browser clásico (a súa
+      # filebrowser.db non é compatible e non se pode migrar: os contrasinais están
+      # hasheados e o esquema é outro).
       file:
-        path: /etc/filebrowser/filebrowser.db
+        path: "{{ item }}"
         state: absent
+      loop:
+        - "{{ filebrowser_db }}"
+        - "{{ filebrowser_config }}"
+        - "{{ filebrowser_state }}"
 
-    - name: 7. Crear os directorios necesarios
+    - name: 4. Crear os directorios necesarios
       file:
         path: "{{ item }}"
         state: directory
@@ -67,32 +89,52 @@
       loop:
         - /etc/filebrowser
         - "{{ filebrowser_root }}"
+        - "{{ filebrowser_state }}"
 
-    - name: 8. Inicializar a base de datos de File Browser
-      command: /usr/local/bin/filebrowser config init --database=/etc/filebrowser/filebrowser.db
-      changed_when: true
-
-    - name: 9. Configurar enderezo, porto, raíz e log de File Browser
-      command: >
-        /usr/local/bin/filebrowser config set --database=/etc/filebrowser/filebrowser.db
-        --address=0.0.0.0 --port={{ filebrowser_port }}
-        --baseurl={{ filebrowser_baseurl }}
-        --root={{ filebrowser_root }} --log=/var/log/filebrowser.log
-      changed_when: true
-
-    - name: 10. Crear o usuario administrador de File Browser
-      command: >
-        /usr/local/bin/filebrowser users add {{ filebrowser_admin_user }} '{{ filebrowser_admin_pass }}'
-        --perm.admin=true --database=/etc/filebrowser/filebrowser.db
+    - name: 5. Escribir o config.yaml de Quantum
+      # adminPassword só se deixa ata o primeiro arranque (paso 11): mentres estea,
+      # cada reinicio pisaría o contrasinal do admin. O ficheiro é 0600 igualmente.
+      # to_json dá unha cadea YAML válida (con escapes) sexan cales sexan os
+      # caracteres do contrasinal.
+      copy:
+        dest: "{{ filebrowser_config }}"
+        owner: www-data
+        group: www-data
+        mode: '0600'
+        content: |
+          # Xerado por Piztu (playbooks/instalar_filebrowser.yaml). Non editar a man:
+          # sobrescríbese en cada instalación de File Browser.
+          server:
+            port: {{ filebrowser_port }}
+            baseURL: "{{ filebrowser_baseurl }}"
+            database: "{{ filebrowser_db }}"
+            cacheDir: "{{ filebrowser_state }}/cache"
+            logging:
+              - output: "stdout"        # vai ao journal: journalctl -u filebrowser
+            filesystem:
+              # Os mesmos modos que o File Browser clásico: o alumnado non le os
+              # cartafoles dos demais desde o sistema; Piztu le dixitalizacion/
+              # polo grupo www-data (piztu_os_user).
+              createFilePermission: "640"
+              createDirectoryPermission: "750"
+            sources:
+              - path: "{{ filebrowser_root }}"
+                name: "{{ filebrowser_source }}"
+                config:
+                  # Obrigatorio: sen isto os tamaños saen a bloques de 4 KB e
+                  # tao/fbcola.go non pode confirmar que un ficheiro xa subiu.
+                  useLogicalSize: true
+          auth:
+            adminUsername: {{ filebrowser_admin_user | to_json }}
+            adminPassword: {{ filebrowser_admin_pass | to_json }}
       no_log: true
-      changed_when: true
 
-    - name: 11. Crear un ficheiro de proba inicial
+    - name: 6. Crear un ficheiro de proba inicial
       copy:
         content: "Benvido a File Browser.\n"
         dest: "{{ filebrowser_root }}/leame.txt"
 
-    - name: 12. Asignar a propiedade a www-data
+    - name: 7. Asignar a propiedade a www-data
       file:
         path: "{{ item }}"
         owner: www-data
@@ -100,31 +142,80 @@
         recurse: yes
       loop:
         - "{{ filebrowser_root }}"
+        - "{{ filebrowser_state }}"
         - /etc/filebrowser
 
-    - name: 13. Crear o servizo systemd para File Browser
+    - name: 8. Crear o servizo systemd para File Browser
       copy:
         dest: /etc/systemd/system/filebrowser.service
         content: |
           [Unit]
-          Description=File Browser
+          Description=File Browser Quantum
           After=network.target
 
           [Service]
           User=www-data
           Group=www-data
-          ExecStart=/usr/local/bin/filebrowser --database=/etc/filebrowser/filebrowser.db
+          WorkingDirectory={{ filebrowser_state }}
+          ExecStart=/usr/local/bin/filebrowser -c {{ filebrowser_config }}
           Restart=on-failure
 
           [Install]
           WantedBy=multi-user.target
 
-    - name: 14. Activar e (re)arrincar o servizo File Browser
+    - name: 9. Activar e (re)arrincar o servizo File Browser
       systemd:
         name: filebrowser
         daemon_reload: yes
         enabled: yes
         state: restarted
+
+    # ── Comprobación do primeiro arranque e retirada do contrasinal do config ──
+    - name: 10. Agardar a que Quantum responda
+      uri:
+        url: "http://127.0.0.1:{{ filebrowser_port }}{{ filebrowser_baseurl }}/health"
+        status_code: 200
+      register: fb_saude
+      until: fb_saude.status == 200
+      retries: 30
+      delay: 2
+
+    - name: 10b. Comprobar que o admin entra co contrasinal do config.yaml
+      # X-Password vai codificado como URL (un "ñ" ou un "%" en crú darían 401).
+      uri:
+        url: "http://127.0.0.1:{{ filebrowser_port }}{{ filebrowser_baseurl }}/api/auth/login?username={{ filebrowser_admin_user | urlencode }}"
+        method: POST
+        headers:
+          X-Password: "{{ filebrowser_admin_pass | urlencode }}"
+        status_code: 200
+      no_log: true
+
+    - name: 11. Quitar adminPassword do config.yaml
+      # A conta xa está na base de datos co contrasinal (hash); sen esta liña un
+      # reinicio non o restablece, e o contrasinal deixa de estar en claro no disco.
+      lineinfile:
+        path: "{{ filebrowser_config }}"
+        regexp: '^  adminPassword:'
+        state: absent
+      no_log: true
+
+    - name: 11b. Reiniciar para que o config sen o contrasinal sexa o que corre
+      systemd:
+        name: filebrowser
+        state: restarted
+
+    - name: 11c. Comprobar que o admin SEGUE a entrar tras quitar o contrasinal do config
+      uri:
+        url: "http://127.0.0.1:{{ filebrowser_port }}{{ filebrowser_baseurl }}/api/auth/login?username={{ filebrowser_admin_user | urlencode }}"
+        method: POST
+        headers:
+          X-Password: "{{ filebrowser_admin_pass | urlencode }}"
+        status_code: 200
+      register: fb_login_final
+      until: fb_login_final.status == 200
+      retries: 15
+      delay: 2
+      no_log: true
 
     # ── Porto 80: Apache como proxy inverso ──────────────────────────────────
     # File Browser segue no 8080 (sen privilexios, como www-data), e é Apache
@@ -133,20 +224,20 @@
     # (/var/www/html) segue intacto na raíz. Se non hai Apache neste servidor
     # sáltase todo o bloque: File Browser queda accesible no 8080 coma sempre,
     # iso si, xa baixo a subruta {{ filebrowser_baseurl }}.
-    - name: 14b. Comprobar se hai Apache neste servidor
+    - name: 12. Comprobar se hai Apache neste servidor
       stat:
         path: /usr/sbin/apache2
       register: apache_bin
 
-    - name: 14c. Activar os módulos de proxy de Apache
-      # proxy_wstunnel é para a consola/eventos de File Browser, que usan
-      # websockets: sen el o proxy devolve 500 nesa ruta.
-      command: a2enmod proxy proxy_http proxy_wstunnel
+    - name: 12b. Activar os módulos de proxy de Apache
+      # Sen proxy_wstunnel: a consola de comandos (websocket) do File Browser clásico
+      # non existe en Quantum, e os eventos en tempo real van por SSE sobre HTTP.
+      command: a2enmod proxy proxy_http
       when: apache_bin.stat.exists
       register: apache_modulos
       changed_when: "'Enabling' in apache_modulos.stdout"
 
-    - name: 14d. Escribir a configuración de proxy de Apache para File Browser
+    - name: 12c. Escribir a configuración de proxy de Apache para File Browser
       copy:
         dest: /etc/apache2/conf-available/piztu-filebrowser.conf
         content: |
@@ -154,19 +245,23 @@
           # sobrescríbese en cada instalación de File Browser.
           <IfModule mod_proxy.c>
             ProxyPreserveHost On
-            # O websocket vai primeiro: a primeira regra que casa gaña.
-            ProxyPass {{ filebrowser_baseurl }}/api/command ws://127.0.0.1:{{ filebrowser_port }}{{ filebrowser_baseurl }}/api/command
             ProxyPass {{ filebrowser_baseurl }} http://127.0.0.1:{{ filebrowser_port }}{{ filebrowser_baseurl }}
             ProxyPassReverse {{ filebrowser_baseurl }} http://127.0.0.1:{{ filebrowser_port }}{{ filebrowser_baseurl }}
           </IfModule>
       when: apache_bin.stat.exists
 
-    - name: 14e. Activar a configuración e recargar Apache
+    - name: 12d. Activar a configuración e recargar Apache
       shell: a2enconf piztu-filebrowser && systemctl reload apache2
       when: apache_bin.stat.exists
       changed_when: true
 
-    - name: 15. Engadir o usuario de Piztu ao grupo www-data (lectura de sesións de Tao)
+    - name: 13. Comprobar que a API responde polo porto 80 (a ruta que usa o alumnado)
+      uri:
+        url: "http://127.0.0.1{{ filebrowser_baseurl }}/health"
+        status_code: 200
+      when: apache_bin.stat.exists
+
+    - name: 14. Engadir o usuario de Piztu ao grupo www-data (lectura de sesións de Tao)
       user:
         name: "{{ piztu_os_user }}"
         groups: www-data
@@ -177,7 +272,7 @@
     - name: Finalizado
       debug:
         msg: >
-          File Browser instalado en
+          File Browser Quantum {{ filebrowser_version }} instalado en
           {% if apache_bin.stat.exists %}http://{{ ansible_fqdn | default(inventory_hostname) }}{{ filebrowser_baseurl }} (porto 80, vía Apache){% else %}http://localhost:{{ filebrowser_port }}{{ filebrowser_baseurl }}{% endif %}
           (usuario: {{ filebrowser_admin_user }}).
           {% if piztu_grupo_www_data is defined and piztu_grupo_www_data is changed %}

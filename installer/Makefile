@@ -13,7 +13,10 @@ DIST_BINARY = Piztu_Debian_installer
 ## "files", que empaqueta o Piztu que se instala.
 build: check-go check-wails VERSION assets/logo.png build/appicon.png files
 	go mod tidy
-	wails build
+	@# webkit2_41: Wails v2 busca por defecto webkit2gtk-4.0, e un Debian 12 cos
+	@# -dev actuais só ten a 4.1 ("Package webkit2gtk-4.0 was not found"). É a
+	@# mesma que xa enlaza piztu (Wails v3 + gtk3), así que non pide nada novo.
+	wails build -tags webkit2_41
 	@mv build/bin/$(BINARY) build/bin/$(DIST_BINARY)
 	@# Paquete de actualización en quente: súbese á Release XUNTO ao instalador,
 	@# ou as aulas xa instaladas só poderán reinstalar (ver o propio script).

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"embed"
 	"fmt"
 	"io/fs"
@@ -339,6 +340,42 @@ func fixConfigFilebrowser(fbUser, fbPass string) error {
 	)
 	novo := strings.Join(lines, "\n") + bloque
 	return os.WriteFile(cfgPath, []byte(novo), 0644)
+}
+
+// actualizarAdminTao pon o usuario e o contrasinal de administrador de File Browser
+// recén instalados en ~/.config/dixitalizacion/admin.json, o ficheiro onde Tao garda as
+// credenciais coas que xestiona as contas do alumnado. Instalar File Browser por riba
+// doutro purga a súa base de datos e recrea o admin co contrasinal do instalador, pero ese
+// ficheiro (por-usuario, fóra de destDir) conservaba o antigo: Tao daba 401 e, cos intentos
+// repetidos, Quantum bloqueaba a conta `admin` 15 min para TODOS os clientes (o servizo de
+// historial incluído).
+//
+// Só toca fbAdminUser e fbAdminPass; o resto (centro, departamento, URL do servidor...)
+// queda como estaba, e o ficheiro mantén dono e modo (escribir sobre un existente non os
+// cambia; o instalador corre como root pero o ficheiro é do profesor). Se o ficheiro non
+// existe (Tao nunca se configurou neste usuario) non fai nada e devolve false: ese
+// profesor terá que poñer as credenciais a primeira vez, sen nada desfasado.
+func actualizarAdminTao(home, fbUser, fbPass string) (bool, error) {
+	ruta := filepath.Join(home, ".config", "dixitalizacion", "admin.json")
+	datos, err := os.ReadFile(ruta)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	var cfg map[string]json.RawMessage
+	if err := json.Unmarshal(datos, &cfg); err != nil {
+		return false, fmt.Errorf("%s non é un JSON válido, non se toca: %w", ruta, err)
+	}
+	usuario, _ := json.Marshal(fbUser)
+	contrasinal, _ := json.Marshal(fbPass)
+	cfg["fbAdminUser"], cfg["fbAdminPass"] = usuario, contrasinal
+	novo, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return false, err
+	}
+	return true, os.WriteFile(ruta, novo, 0o600)
 }
 
 // instalarServizoHistorial copia historial-daemon (xa extraído en destDir polo

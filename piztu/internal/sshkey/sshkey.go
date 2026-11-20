@@ -46,28 +46,43 @@ func authClave(keyPath string) (ssh.AuthMethod, error) {
 	return ssh.PublicKeys(signer), nil
 }
 
+// cmdMacWin: o mesmo ca cmdMac para clientes Windows (adaptador da ruta por
+// defecto). Lánzase con `powershell -Command` para que valla tanto se a shell
+// de OpenSSH é cmd.exe coma se é PowerShell; sen `$` nin comiñas dobres
+// dentro, para que ningunha das dúas shells as interprete. Devolve
+// "F8-B1-56-A6-7C-7C" (normalízao normalizarMac).
+const cmdMacWin = `powershell -NoProfile -NonInteractive -Command "(Get-NetAdapter -InterfaceIndex (Get-NetRoute -DestinationPrefix 0.0.0.0/0 | Sort-Object RouteMetric | Select-Object -First 1).ifIndex).MacAddress"`
+
+// normalizarMac pasa "F8-B1-…" (Windows) ou "f8:b1:…" á forma "f8:b1:…".
+func normalizarMac(s string) string {
+	return strings.ReplaceAll(strings.ToLower(strings.TrimSpace(s)), "-", ":")
+}
+
 // LerMac conéctase ao host con autenticación por clave (sen contrasinal, xa que
 // a clave se distribuíu no Paso 3) e devolve a MAC da súa interface por defecto.
+// Proba primeiro a orde de Linux e, se non devolve unha MAC, a de Windows,
+// cada unha na súa sesión (a de Linux nun Windows só imprime un erro).
 func LerMac(host, usuario, keyPath string) (string, error) {
 	client, err := dialClave(host, usuario, keyPath, 8*time.Second)
 	if err != nil {
 		return "", err
 	}
 	defer client.Close()
-	sess, err := client.NewSession()
-	if err != nil {
-		return "", err
+	var ultima string
+	for _, orde := range []string{cmdMac, cmdMacWin} {
+		sess, err := client.NewSession()
+		if err != nil {
+			return "", err
+		}
+		out, _ := sess.Output(orde)
+		sess.Close()
+		mac := normalizarMac(string(out))
+		if reMac.MatchString(mac) {
+			return mac, nil
+		}
+		ultima = mac
 	}
-	defer sess.Close()
-	out, err := sess.Output(cmdMac)
-	if err != nil {
-		return "", err
-	}
-	mac := strings.ToLower(strings.TrimSpace(string(out)))
-	if !reMac.MatchString(mac) {
-		return "", fmt.Errorf("MAC non válida: %q", mac)
-	}
-	return mac, nil
+	return "", fmt.Errorf("MAC non válida: %q", ultima)
 }
 
 // Escanear conéctase en paralelo a todos os hosts e devolve {host: mac} dos que

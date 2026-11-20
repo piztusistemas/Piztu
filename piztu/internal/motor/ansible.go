@@ -48,6 +48,13 @@ func (m *MotorAnsible) ExecutarAccion(nomeLogico string, hosts []string, cb Call
 		enviarWoL(m.cfg, hosts, cb)
 		return nil
 	}
+	hosts, fin := m.derivarWindows(hosts, func(ssh *MotorSSH, win []string) {
+		_ = ssh.ExecutarAccion(nomeLogico, win, cb)
+	})
+	defer fin()
+	if len(hosts) == 0 {
+		return nil
+	}
 	if err := m.comprobarAnsible(); err != nil {
 		return err
 	}
@@ -71,6 +78,13 @@ func (m *MotorAnsible) ExecutarAccion(nomeLogico string, hosts []string, cb Call
 // extra-vars (-e '{"bloquear_internet":true,...}'), para que só bloquee o
 // que estea marcado na configuración gardada (ver internal/db).
 func (m *MotorAnsible) ExecutarBloqueo(hosts []string, opcions map[string]bool, cb Callbacks) error {
+	hosts, fin := m.derivarWindows(hosts, func(ssh *MotorSSH, win []string) {
+		_ = ssh.ExecutarBloqueo(win, opcions, cb)
+	})
+	defer fin()
+	if len(hosts) == 0 {
+		return nil
+	}
 	if err := m.comprobarAnsible(); err != nil {
 		return err
 	}
@@ -182,11 +196,47 @@ func (m *MotorAnsible) playbookTemporalTexto(contido string) (string, error) {
 	return f.Name(), nil
 }
 
+// derivarWindows aparta os equipos Windows dunha acción do motor Ansible e
+// lánzaos en fondo por `fn` co motor SSH, que xa sabe facer as accións da
+// aula en Windows con PowerShell (ver ssh_win.go) — así unha aula mixta
+// funciona co motor Ansible sen duplicar cada playbook en módulos win_*.
+// Devolve os equipos que seguen polo playbook e unha función que agarda a
+// que remate a parte Windows (chamala con defer: as callbacks dos dous lados
+// teñen que acabar antes de que o chamador dea a acción por rematada).
+func (m *MotorAnsible) derivarWindows(hosts []string, fn func(ssh *MotorSSH, win []string)) ([]string, func()) {
+	sos := SOsDeHosts(m.cfg.HostsFile, hosts)
+	var resto, win []string
+	for _, h := range hosts {
+		if sos[h] == SOWindows {
+			win = append(win, h)
+		} else {
+			resto = append(resto, h)
+		}
+	}
+	if len(win) == 0 {
+		return hosts, func() {}
+	}
+	feito := make(chan struct{})
+	go func() {
+		defer close(feito)
+		fn(&MotorSSH{cfg: m.cfg}, win)
+	}()
+	return resto, func() { <-feito }
+}
+
 // ── Prácticas: enviar / limpar / recoller ────────────────────────────────────
 
 func (m *MotorAnsible) EnviarFicheiros(hosts []string, ficheiros []string, cb Callbacks) error {
 	if err := m.comprobarAnsible(); err != nil {
 		return err
+	}
+	// Windows: SFTP ao escritorio real (PowerShell), como no motor SSH.
+	hosts, fin := m.derivarWindows(hosts, func(ssh *MotorSSH, win []string) {
+		_ = ssh.EnviarFicheiros(win, ficheiros, cb)
+	})
+	defer fin()
+	if len(hosts) == 0 {
+		return nil
 	}
 	tarefas := m.deteccionEscritorio()
 	tarefas = append(tarefas, map[string]any{
@@ -222,6 +272,14 @@ func (m *MotorAnsible) LimparPracticas(hosts []string, cb Callbacks) error {
 	if err := m.comprobarAnsible(); err != nil {
 		return err
 	}
+	// Windows: SFTP ao escritorio real (PowerShell), como no motor SSH.
+	hosts, fin := m.derivarWindows(hosts, func(ssh *MotorSSH, win []string) {
+		_ = ssh.LimparPracticas(win, cb)
+	})
+	defer fin()
+	if len(hosts) == 0 {
+		return nil
+	}
 	tarefas := m.deteccionEscritorio()
 	tarefas = append(tarefas,
 		map[string]any{
@@ -248,6 +306,14 @@ func (m *MotorAnsible) LimparPracticas(hosts []string, cb Callbacks) error {
 func (m *MotorAnsible) RecollerPracticas(hosts []string, cb Callbacks) error {
 	if err := m.comprobarAnsible(); err != nil {
 		return err
+	}
+	// Windows: SFTP ao escritorio real (PowerShell), como no motor SSH.
+	hosts, fin := m.derivarWindows(hosts, func(ssh *MotorSSH, win []string) {
+		_ = ssh.RecollerPracticas(win, cb)
+	})
+	defer fin()
+	if len(hosts) == 0 {
+		return nil
 	}
 	// Limpeza local previa (layout practicas/<host>/).
 	for _, h := range hosts {

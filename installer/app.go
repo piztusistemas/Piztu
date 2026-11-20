@@ -272,6 +272,15 @@ func (a *App) InstalarFileBrowser(fbUser, fbPass string) {
 		if err := fixConfigFilebrowser(fbUser, fbPass); err != nil {
 			emit(fmt.Sprintf(a.tr.T("filebrowser.errofilebrowsercfg"), err.Error()))
 		}
+		// As credenciais que Tao ten gardadas (admin.json) quedaron desfasadas se File
+		// Browser xa estaba instalado: poñer as novas evita o bloqueo da conta admin.
+		if _, home := getRealUser(); home != "" {
+			if feito, err := actualizarAdminTao(home, fbUser, fbPass); err != nil {
+				emit(fmt.Sprintf(a.tr.T("filebrowser.erroadmintao"), err.Error()))
+			} else if feito {
+				emit(a.tr.T("filebrowser.admintao.ok"))
+			}
+		}
 		if err := instalarServizoHistorial(realUser); err != nil {
 			emit(fmt.Sprintf(a.tr.T("filebrowser.historial.erro"), err.Error()))
 		} else {

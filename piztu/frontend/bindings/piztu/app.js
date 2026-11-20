@@ -534,6 +534,17 @@ export function PanelModulo(id) {
 }
 
 /**
+ * PrepararClientesWindows escribe en <base_dir>/clientes_windows/ o .ps1 (cos
+ * datos da aula) e o .bat que o lanza coma administrador, abre ese cartafol
+ * no xestor de ficheiros e devolve a súa ruta. Se a clave da aula aínda non
+ * existe, créaa (a mesma que reparte DistribuirClaveSSH aos Linux).
+ * @returns {$CancellablePromise<string>}
+ */
+export function PrepararClientesWindows() {
+    return $Call.ByID(1469691974);
+}
+
+/**
  * RecollerPracticas recolle os traballos dos destinos. Devolve op_id.
  * @param {string[]} destinos
  * @returns {$CancellablePromise<string>}

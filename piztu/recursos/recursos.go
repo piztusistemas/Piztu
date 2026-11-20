@@ -11,6 +11,7 @@
 //	cp -r ../playbooks recursos/playbooks
 //	cp -r ../salt      recursos/salt
 //	cp -r ../idiomas   recursos/idiomas
+//	cp ../clientes_windows/* recursos/clientes_windows/
 package recursos
 
 import (
@@ -29,8 +30,32 @@ var saltFS embed.FS
 //go:embed all:idiomas
 var idiomasFS embed.FS
 
+//go:embed all:clientes_windows
+var clientesWindowsFS embed.FS
+
 //go:embed tao-icon.png
 var taoIconPNG []byte
+
+// PreparadorWindows devolve o preparador dos equipos Windows do alumnado
+// (copia de ../clientes_windows/): o .ps1 coas marcas @@SERVIDOR@@,
+// @@CLAVE_PUBLICA@@ e @@USUARIO@@ sen substituír, e o .bat que o
+// lanza coma administrador. Ver App.PrepararClientesWindows.
+func PreparadorWindows() (ps1, bat []byte, err error) {
+	if ps1, err = clientesWindowsFS.ReadFile("clientes_windows/preparar_cliente_windows.ps1"); err != nil {
+		return nil, nil, err
+	}
+	bat, err = clientesWindowsFS.ReadFile("clientes_windows/preparar_cliente_windows.bat")
+	return ps1, bat, err
+}
+
+// ScriptSalt devolve un ficheiro embebido de recursos/salt (ex.
+// "win_bloqueo.ps1"). Úsao o motor SSH para os equipos Windows, que executa
+// por SSH os mesmos scripts PowerShell que os estados Salt mandan por
+// `cmd.script` — unha soa fonte para os dous motores.
+func ScriptSalt(nome string) (string, error) {
+	b, err := saltFS.ReadFile("salt/" + nome)
+	return string(b), err
+}
 
 // IconaTao devolve os bytes da icona de Tao (a mesma que usa o instalador en
 // installer/tao/icon.png), para InstalarTaoClientes escribila nun temporal e
@@ -47,8 +72,50 @@ func DesplegarPlaybooks(destDir string) (int, error) {
 // hai ningún alí. Necesarios para os motores Salt e Salt-SSH: sen isto, en macOS
 // (onde base_dir arranca baleiro) calquera acción falla con "Estado Salt non
 // atopado", porque os .sls quedan no repositorio e non no base_dir real.
+//
+// Os scripts PowerShell (win_*.ps1) que usan as ramas Windows dos estados
+// (`cmd.script salt://win_….ps1`) cópianse SEMPRE que falten, aínda que xa
+// houbese .sls: nunha instalación anterior á aula mixta, sen isto, o master
+// nunca os serviría e o bloqueo de Windows fallaría. Nunca se pisa un que xa
+// exista (pode estar editado).
 func DesplegarEstadosSalt(destDir string) (int, error) {
-	return desplegar(saltFS, "salt", destDir, ".sls")
+	n, err := desplegar(saltFS, "salt", destDir, ".sls")
+	if err != nil {
+		return n, err
+	}
+	m, err := desplegarFaltantes(saltFS, "salt", destDir, ".ps1")
+	return n + m, err
+}
+
+// desplegarFaltantes copia de `raiz` a destDir só os ficheiros con extensión
+// `ext` que aínda non existen alí (non entra en subcartafoles).
+func desplegarFaltantes(fsys embed.FS, raiz, destDir, ext string) (int, error) {
+	entradas, err := fsys.ReadDir(raiz)
+	if err != nil {
+		return 0, err
+	}
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		return 0, err
+	}
+	escritos := 0
+	for _, e := range entradas {
+		if e.IsDir() || filepath.Ext(e.Name()) != ext {
+			continue
+		}
+		destino := filepath.Join(destDir, e.Name())
+		if _, err := os.Stat(destino); err == nil {
+			continue
+		}
+		data, err := fsys.ReadFile(raiz + "/" + e.Name())
+		if err != nil {
+			return escritos, err
+		}
+		if err := os.WriteFile(destino, data, 0o644); err != nil {
+			return escritos, err
+		}
+		escritos++
+	}
+	return escritos, nil
 }
 
 // DesplegarIdiomas extrae os ficheiros de idioma a destDir se aínda non hai

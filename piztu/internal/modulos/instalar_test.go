@@ -131,3 +131,20 @@ func TestActualizarNonBorraSeFallaADescarga(t *testing.T) {
 		t.Error("quedou o cartafol temporal .tao.novo despois do fallo")
 	}
 }
+
+func TestNomeZipParaSO(t *testing.T) {
+	casos := []struct{ nome, goos, quere string }{
+		{"tao_26.7.zip", "linux", "tao_26.7.zip"},
+		{"tao_windows_26.7.zip", "linux", ""},
+		{"tao_windows_26.7.zip", "windows", "tao_26.7.zip"},
+		{"tao_26.7.zip", "windows", ""},
+		{"yang_blockly-1.2.zip", "linux", "yang_blockly-1.2.zip"},
+		{"yang_blockly_windows-1.2.zip", "windows", "yang_blockly-1.2.zip"},
+		{"README.md", "windows", "README.md"},
+	}
+	for _, c := range casos {
+		if g := nomeZipParaSO(c.nome, c.goos); g != c.quere {
+			t.Errorf("nomeZipParaSO(%q, %q) = %q, quería %q", c.nome, c.goos, g, c.quere)
+		}
+	}
+}

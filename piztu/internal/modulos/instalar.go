@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -201,7 +202,7 @@ func mellorZipPrefixo(entradas []ghContentEntry, prefixo string) (CatalogoEntrad
 	var mellor CatalogoEntrada
 	achada := false
 	for _, e := range entradas {
-		m := patron.FindStringSubmatch(e.Name)
+		m := patron.FindStringSubmatch(nomeZipParaEsteSO(e.Name))
 		if m == nil || e.DownloadURL == "" {
 			continue
 		}
@@ -224,6 +225,38 @@ func resolverGitHubUltimaVersion(repo, prefixo string) (CatalogoEntrada, bool) {
 	return mellorZipPrefixo(entradas, prefixo)
 }
 
+// sufixoWindows marca, no nome do .zip publicado, a compilación de Windows
+// dun módulo: "tao_windows_26.7.zip" é o Tao para os equipos Windows do
+// alumnado e "tao_26.7.zip" o de Linux. No repo poden convivir os dous.
+const sufixoWindows = "_windows"
+
+// nomeZipParaEsteSO traduce o nome dun .zip do repo ao que verían os
+// patróns de versión (sen o sufixo de SO), ou "" se ese .zip é doutro SO:
+//   - en Windows: "tao_windows_26.7.zip" → "tao_26.7.zip"; "tao_26.7.zip" → ""
+//   - noutros:    "tao_26.7.zip" tal cal; "tao_windows_26.7.zip" → ""
+//
+// Sen isto, Piztu (en Linux) descubriría un módulo novo chamado
+// "tao_windows" e instalaríao coma se fose del.
+func nomeZipParaEsteSO(nome string) string {
+	return nomeZipParaSO(nome, runtime.GOOS)
+}
+
+func nomeZipParaSO(nome, goos string) string {
+	m := reZipVersionado.FindStringSubmatch(nome)
+	if m == nil {
+		return nome // non é un zip versionado: que decidan os patróns
+	}
+	id := m[1]
+	eWindows := strings.HasSuffix(strings.ToLower(id), sufixoWindows)
+	switch {
+	case goos == "windows" && eWindows:
+		return id[:len(id)-len(sufixoWindows)] + nome[len(id):]
+	case goos == "windows" || eWindows:
+		return ""
+	}
+	return nome
+}
+
 // reZipVersionado recoñece calquera "<id>_versión.zip" (ou "-versión") na
 // raíz dun repo SEN esixir un id xa coñecido de antemán — a diferenza do
 // patrón en mellorZipPrefixo (que leva o prefixo cravado), aquí o id é
@@ -238,7 +271,7 @@ var reZipVersionado = regexp.MustCompile(`^(.+?)[_-]([0-9]+(?:\.[0-9]+)+)\.zip$`
 func todosOsZipsPorID(entradas []ghContentEntry) map[string]CatalogoEntrada {
 	res := map[string]CatalogoEntrada{}
 	for _, e := range entradas {
-		m := reZipVersionado.FindStringSubmatch(e.Name)
+		m := reZipVersionado.FindStringSubmatch(nomeZipParaEsteSO(e.Name))
 		if m == nil || e.DownloadURL == "" {
 			continue
 		}

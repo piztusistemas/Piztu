@@ -48,17 +48,17 @@ func (m *MotorSSH) ExecutarAccion(accion string, hosts []string, cb Callbacks) e
 		enviarWoL(m.cfg, hosts, cb)
 		return nil
 	case "durmir", "durmirAula":
-		m.correr(hosts, scriptDurmir, cb)
+		m.correrSO(hosts, scriptDurmir, psDurmir, cb)
 	case "apagar", "apagar_aula":
-		m.correr(hosts, scriptApagar, cb)
+		m.correrSO(hosts, scriptApagar, psApagar, cb)
 	case "reiniciar", "reiniciarAula":
-		m.correr(hosts, scriptReiniciar, cb)
+		m.correrSO(hosts, scriptReiniciar, psReiniciar, cb)
 	case "liberar", "desbloquear", "desbloquearAula":
-		m.correr(hosts, scriptDesbloquear, cb)
+		m.correrSO(hosts, scriptDesbloquear, psScriptSalt("win_desbloqueo.ps1"), cb)
 	case "aviso_ruido", "avisoRuido":
-		m.correr(hosts, scriptAvisoRuido, cb)
+		m.correrSO(hosts, scriptAvisoRuido, psScriptSalt("win_aviso_ruido.ps1"), cb)
 	case "comprobar_bloqueo":
-		m.correr(hosts, scriptComprobarBloqueo, cb)
+		m.correrSO(hosts, scriptComprobarBloqueo, psComprobarBloqueo, cb)
 	default:
 		// Accións que traen os módulos: o script que declaran execútase igual ca
 		// os internos, incluída a substitución de @@USER@@. Os outros motores non
@@ -71,13 +71,14 @@ func (m *MotorSSH) ExecutarAccion(accion string, hosts []string, cb Callbacks) e
 		if err != nil {
 			return &ErrMotor{Msg: "non se puido ler o script do módulo: " + err.Error()}
 		}
-		m.correr(hosts, string(guion), cb)
+		// Os scripts de módulo son bash: os equipos Windows reciben un erro claro.
+		m.correrSO(hosts, string(guion), "", cb)
 	}
 	return nil
 }
 
 func (m *MotorSSH) ExecutarBloqueo(hosts []string, opcions map[string]bool, cb Callbacks) error {
-	m.correr(hosts, scriptBloqueo(opcions), cb)
+	m.correrSO(hosts, scriptBloqueo(opcions), psBloqueo(opcions), cb)
 	return nil
 }
 
@@ -132,13 +133,15 @@ func (m *MotorSSH) correrFicheiros(hosts []string, cb Callbacks, fn func(host st
 }
 
 func (m *MotorSSH) EnviarFicheiros(hosts []string, ficheiros []string, cb Callbacks) error {
+	win := practicasWindows(m.cfg.HostsFile, hosts)
 	m.correrFicheiros(hosts, cb, func(host string) error {
-		return sshkey.SubirPracticas(host, m.usuario(), m.cfg.SSHKeyFile, m.cfg.RemotePracticas, ficheiros)
+		return sshkey.SubirPracticas(host, m.usuario(), m.cfg.SSHKeyFile, m.cfg.RemotePracticas, ficheiros, win[host])
 	})
 	return nil
 }
 
 func (m *MotorSSH) RecollerPracticas(hosts []string, cb Callbacks) error {
+	win := practicasWindows(m.cfg.HostsFile, hosts)
 	m.correrFicheiros(hosts, cb, func(host string) error {
 		localDir := filepath.Join(m.cfg.PracticasDir, host)
 		// Limpeza local previa (mesmo layout ca o motor Ansible).
@@ -149,15 +152,16 @@ func (m *MotorSSH) RecollerPracticas(hosts []string, cb Callbacks) error {
 				}
 			}
 		}
-		_, err := sshkey.RecollerPracticas(host, m.usuario(), m.cfg.SSHKeyFile, m.cfg.RemotePracticas, localDir)
+		_, err := sshkey.RecollerPracticas(host, m.usuario(), m.cfg.SSHKeyFile, m.cfg.RemotePracticas, localDir, win[host])
 		return err
 	})
 	return nil
 }
 
 func (m *MotorSSH) LimparPracticas(hosts []string, cb Callbacks) error {
+	win := practicasWindows(m.cfg.HostsFile, hosts)
 	m.correrFicheiros(hosts, cb, func(host string) error {
-		return sshkey.LimparPracticas(host, m.usuario(), m.cfg.SSHKeyFile, m.cfg.RemotePracticas)
+		return sshkey.LimparPracticas(host, m.usuario(), m.cfg.SSHKeyFile, m.cfg.RemotePracticas, win[host])
 	})
 	return nil
 }

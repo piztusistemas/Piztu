@@ -598,6 +598,26 @@ input[type="range"] { cursor: pointer; accent-color: var(--unlock); height: 4px;
     mask: var(--icon-folder) center / contain no-repeat;
 }
 
+/* Acendido pero o minion Salt non contesta (← salt_aviso); o porqué e o
+   arranxo van no title. */
+.pc-aviso {
+    display: none;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    color: #92400e;
+    background: var(--amber-soft);
+    padding: 3px 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border-bottom: 1px solid var(--border-color);
+    cursor: help;
+}
+.pc-aviso.activo { display: flex; }
+.pc-aviso.activo::before { content: "⚠"; color: var(--amber); }
+
 /* Nome do alumnado conectado con Tao neste equipo (← estado_tao) */
 .pc-user {
     display: none;
@@ -882,13 +902,14 @@ input[type="range"] { cursor: pointer; accent-color: var(--unlock); height: 4px;
 /* Grid, not CSS columns: with a capped height, columns overflow sideways and
    the horizontal scrollbar covered the last row of hosts. */
 #seleccion-manual {
-    display: none; margin-top: 8px;
-    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-    column-gap: 8px; row-gap: 2px;
-    font-size: 0.8rem; max-height: 140px;
-    overflow-y: auto; overflow-x: hidden; padding-bottom: 6px;
+    display: none; grid-template-columns: 1fr 1fr; column-gap: 8px; align-content: start;
+    margin-top: 8px; font-size: 0.8rem; max-height: 140px; overflow-y: auto; overflow-x: hidden;
+    padding: 0 4px 6px 0;
 }
-#seleccion-manual label { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#seleccion-manual label {
+    display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    margin-bottom: 2px; min-width: 0;
+}
 
 .lista-descubertos {
     margin-top: 10px; max-height: 220px; overflow-y: auto;

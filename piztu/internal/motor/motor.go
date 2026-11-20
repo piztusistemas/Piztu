@@ -26,6 +26,15 @@ func yamlValido(texto string) error {
 	return yaml.Unmarshal([]byte(texto), &calquera)
 }
 
+// pareceXinja indica se `texto` leva marcado de plantilla Jinja ({% … %} ou
+// {{ … }}). Un estado Salt así NON é YAML plano: Salt renderízao por minion
+// (state.template_str) antes de parsealo, e é un uso lexítimo — ex.: ramas
+// por SO nunha aula mixta Linux/Windows. Nese caso sáltase yamlValido; a
+// validación real faina Salt ao renderizar e saltOk detecta o erro.
+func pareceXinja(texto string) bool {
+	return strings.Contains(texto, "{%") || strings.Contains(texto, "{{")
+}
+
 // MotoresValidos e o motor por defecto.
 var MotoresValidos = []string{"ansible", "salt", "ssh"}
 
@@ -52,10 +61,16 @@ func aliasHerdado(nome string) string {
 var MotorDefecto = motorDefecto()
 
 func motorDefecto() string {
-	if runtime.GOOS == "darwin" {
+	if !HaiSaltMaster() {
 		return "ssh"
 	}
 	return "salt"
+}
+
+// HaiSaltMaster di se este SO pode ser salt-master. Piztu instálase en
+// Linux, onde sempre o hai; os equipos Windows da aula levan só o minion.
+func HaiSaltMaster() bool {
+	return runtime.GOOS != "darwin"
 }
 
 // ErrMotor é un erro recuperable dun motor (ex.: playbook/estado non atopado).
@@ -196,7 +211,7 @@ func SetMotor(cfg *config.Config, nome string) (string, error) {
 // nin sequera está no menú e toda acción fallaría.
 func Soportado(nome string) bool {
 	nome = aliasHerdado(nome)
-	if nome == "salt" && runtime.GOOS == "darwin" {
+	if nome == "salt" && !HaiSaltMaster() {
 		return false
 	}
 	return valido(nome)
@@ -220,6 +235,9 @@ var (
 
 // Get devolve a instancia do motor activo (ou o indicado en `nome`).
 func Get(cfg *config.Config, nome string) Motor {
+	if cfg != nil {
+		lembrarCredenciaisSonda(cfg.SSHUser, cfg.SSHKeyFile)
+	}
 	if nome == "" {
 		nome = MotorActivo(cfg)
 	}

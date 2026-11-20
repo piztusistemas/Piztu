@@ -36,15 +36,27 @@ func (s *Servidor) handleWhoami(w http.ResponseWriter, r *http.Request, ses sesi
 // ── GET /api/v1/motor/estado ─────────────────────────────────────────────────
 
 // RespostaMotorEstado é o motor activo e os equipos dispoñibles — para que un
-// módulo saiba que formato xerar (YAML de Ansible ou .sls de Salt).
+// módulo saiba que formato xerar (YAML de Ansible ou .sls de Salt) e, con
+// EquiposSO, para que SO (unha aula pode ser mixta Linux/Windows). EquiposSO
+// mapea nome de equipo → "linux"/"windows"/"mac"; omítese a entrada dun
+// equipo cuxo SO non se puido determinar (minion apagado, sen master…), e o
+// consumidor debe asumir Linux nese caso.
 type RespostaMotorEstado struct {
-	Motor   string   `json:"motor"`
-	Equipos []string `json:"equipos"`
+	Motor     string            `json:"motor"`
+	Equipos   []string          `json:"equipos"`
+	EquiposSO map[string]string `json:"equipos_so,omitempty"`
 }
 
 func (s *Servidor) handleMotorEstado(w http.ResponseWriter, r *http.Request, ses sesion) {
 	m := s.motor()
-	escribirJSON(w, http.StatusOK, RespostaMotorEstado{Motor: m.Nome(), Equipos: m.GetEquipos()})
+	equipos := m.GetEquipos()
+	so := map[string]string{}
+	for h, v := range motor.SOsDeHosts(s.cfg.HostsFile, equipos) {
+		if v != "" {
+			so[h] = string(v)
+		}
+	}
+	escribirJSON(w, http.StatusOK, RespostaMotorEstado{Motor: m.Nome(), Equipos: equipos, EquiposSO: so})
 }
 
 // ── GET /api/v1/equipos ──────────────────────────────────────────────────────

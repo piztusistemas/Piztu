@@ -6,7 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -35,8 +35,8 @@ func (m *MotorSalt) GetEquipos() []string {
 // "sudo: a password is required" que non lle di nada ao profesor. En macOS
 // nunca hai master (ver saltsetup.ErrMasterNonSoportado).
 func (m *MotorSalt) comprobarMaster() error {
-	if runtime.GOOS == "darwin" {
-		return &ErrMotor{Msg: "o motor Salt precisa un salt-master, que non existe en macOS."}
+	if !HaiSaltMaster() {
+		return &ErrMotor{Msg: "o motor Salt precisa un salt-master, que non existe en macOS nin en Windows (usa o motor SSH)."}
 	}
 	if _, err := exec.LookPath("salt"); err != nil {
 		return &ErrMotor{Msg: "o binario `salt` non está instalado neste equipo"}
@@ -96,8 +96,13 @@ func (m *MotorSalt) ExecutarAdhoc(contido string, hosts []string, cb Callbacks) 
 	if err := m.comprobarMaster(); err != nil {
 		return err
 	}
-	if err := yamlValido(contido); err != nil {
-		return &ErrMotor{Msg: "Estado Salt (.sls) non válido: " + err.Error()}
+	// Só se valida como YAML plano se non leva Jinja: un .sls con {% … %}
+	// (ex. ramas por SO nunha aula mixta) renderízao Salt por minion antes
+	// de parsealo — validalo aquí como YAML rexeitaríao en falso.
+	if !pareceXinja(contido) {
+		if err := yamlValido(contido); err != nil {
+			return &ErrMotor{Msg: "Estado Salt (.sls) non válido: " + err.Error()}
+		}
 	}
 	m.runParaleloSalt(hosts, []string{"state.template_str", contido}, cb)
 	return nil
@@ -162,10 +167,23 @@ func (m *MotorSalt) usuario() string {
 	return "usuario"
 }
 
+// practicasWindows devolve, para o conxunto de hosts, cales son Windows. As
+// prácticas envíanse por SFTP igual que en Linux; só cambia a resolución da
+// ruta de destino no cliente (escritorio real vía PowerShell en vez do probe
+// bash Escritorio/Desktop) — ver sshkey.rutasPracticas.
+func practicasWindows(hostsFile string, hosts []string) map[string]bool {
+	w := make(map[string]bool, len(hosts))
+	for h, so := range SOsDeHosts(hostsFile, hosts) {
+		w[h] = so == SOWindows
+	}
+	return w
+}
+
 func (m *MotorSalt) EnviarFicheiros(hosts []string, ficheiros []string, cb Callbacks) error {
 	usuario, keyPath := m.usuario(), m.cfg.SSHKeyFile
+	win := practicasWindows(m.cfg.HostsFile, hosts)
 	correrEnParalelo(hosts, 6, cb, func(host string) (string, bool) {
-		if err := sshkey.SubirPracticas(host, usuario, keyPath, m.cfg.RemotePracticas, ficheiros); err != nil {
+		if err := sshkey.SubirPracticas(host, usuario, keyPath, m.cfg.RemotePracticas, ficheiros, win[host]); err != nil {
 			return err.Error(), false
 		}
 		return "", true
@@ -175,8 +193,9 @@ func (m *MotorSalt) EnviarFicheiros(hosts []string, ficheiros []string, cb Callb
 
 func (m *MotorSalt) LimparPracticas(hosts []string, cb Callbacks) error {
 	usuario, keyPath := m.usuario(), m.cfg.SSHKeyFile
+	win := practicasWindows(m.cfg.HostsFile, hosts)
 	correrEnParalelo(hosts, 6, cb, func(host string) (string, bool) {
-		if err := sshkey.LimparPracticas(host, usuario, keyPath, m.cfg.RemotePracticas); err != nil {
+		if err := sshkey.LimparPracticas(host, usuario, keyPath, m.cfg.RemotePracticas, win[host]); err != nil {
 			return err.Error(), false
 		}
 		return "", true
@@ -186,6 +205,7 @@ func (m *MotorSalt) LimparPracticas(hosts []string, cb Callbacks) error {
 
 func (m *MotorSalt) RecollerPracticas(hosts []string, cb Callbacks) error {
 	usuario, keyPath := m.usuario(), m.cfg.SSHKeyFile
+	win := practicasWindows(m.cfg.HostsFile, hosts)
 	for _, h := range hosts {
 		dir := filepath.Join(m.cfg.PracticasDir, h)
 		if fis, err := os.ReadDir(dir); err == nil {
@@ -198,11 +218,73 @@ func (m *MotorSalt) RecollerPracticas(hosts []string, cb Callbacks) error {
 	}
 	correrEnParalelo(hosts, 6, cb, func(host string) (string, bool) {
 		localDir := filepath.Join(m.cfg.PracticasDir, host)
-		n, err := sshkey.RecollerPracticas(host, usuario, keyPath, m.cfg.RemotePracticas, localDir)
+		n, err := sshkey.RecollerPracticas(host, usuario, keyPath, m.cfg.RemotePracticas, localDir, win[host])
 		if err != nil {
 			return err.Error(), false
 		}
 		return fmt.Sprintf("%d ficheiro(s)", n), true
+	})
+	return nil
+}
+
+// ── Instalar Tao nos clientes Windows ────────────────────────────────────────
+
+// psInstalarTaoWin: corre no minion (SYSTEM). Move o tao.exe subido por SFTP
+// dende o temporal do usuario a C:\Program Files\Piztu e crea os atallos a
+// nivel de máquina: menú Inicio de todos, Escritorio público, e ademais o
+// Escritorio de cada perfil de usuario real (o público non sempre se ve na
+// sesión do alumno se ten os iconos do sistema ocultos). @@TMP@@ substitúese
+// pola ruta real do temporal.
+//
+// TEN QUE SER UNHA SOA LIÑA: `salt cmd.run ... shell=powershell` con Salt 3008
+// en Windows NON executa un script de varias liñas (devolve retcode 0 e saída
+// baleira, sen mover nada — e saltOk daríao coma éxito). Cun só comando de
+// varias sentenzas separadas por ';' vai ben. O marcador final "Tao instalado
+// en" úsao InstalarTaoClientesWindows para confirmar que de verdade correu.
+const psInstalarTaoWin = `$ErrorActionPreference='Stop'; $dst='C:\Program Files\Piztu'; New-Item -ItemType Directory -Force -Path $dst | Out-Null; Move-Item -Force '@@TMP@@' (Join-Path $dst 'tao.exe'); $w=New-Object -ComObject WScript.Shell; $sis=@('Public','Default','Default User','All Users','WDAGUtilityAccount'); $lnks=New-Object System.Collections.ArrayList; [void]$lnks.Add((Join-Path $env:ProgramData 'Microsoft\Windows\Start Menu\Programs\Tao.lnk')); [void]$lnks.Add('C:\Users\Public\Desktop\Tao.lnk'); Get-ChildItem 'C:\Users' -Directory -ErrorAction SilentlyContinue | Where-Object { $sis -notcontains $_.Name } | ForEach-Object { $d=Join-Path $_.FullName 'Desktop'; if (Test-Path $d) { [void]$lnks.Add((Join-Path $d 'Tao.lnk')) } }; foreach ($lnk in $lnks) { New-Item -ItemType Directory -Force -Path (Split-Path $lnk) | Out-Null; $s=$w.CreateShortcut($lnk); $s.TargetPath=(Join-Path $dst 'tao.exe'); $s.WorkingDirectory=$dst; $s.IconLocation=(Join-Path $dst 'tao.exe')+',0'; $s.Description='Tao - rexistro diario e informes asinados do alumnado'; $s.Save() }; Write-Output ('Tao instalado en '+(Join-Path $dst 'tao.exe'))`
+
+// InstalarTaoClientesWindows instala Tao nos equipos Windows: sobe tao.exe por
+// SFTP (como o usuario, sen elevación) a un temporal, e logo un cmd.run no
+// minion (SYSTEM) móveo a C:\Program Files\Piztu e crea os atallos. Faino
+// este motor —non o Ansible— porque só o minion coma SYSTEM pode escribir en
+// Program Files, e o resto do soporte Windows de Piztu xa vai por Salt.
+func (m *MotorSalt) InstalarTaoClientesWindows(hosts []string, taoExeSrc string, cb Callbacks) error {
+	if err := m.comprobarMaster(); err != nil {
+		return err
+	}
+	if _, err := os.Stat(taoExeSrc); err != nil {
+		return &ErrMotor{Msg: "non se atopa tao.exe no servidor: " + err.Error()}
+	}
+	usuario, keyPath := m.usuario(), m.cfg.SSHKeyFile
+	tmpWin := `C:\Users\` + usuario + `\AppData\Local\Temp\piztu_tao_setup.exe`
+	tmpSFTP := "C:/Users/" + usuario + "/AppData/Local/Temp/piztu_tao_setup.exe"
+	ps := strings.ReplaceAll(psInstalarTaoWin, "@@TMP@@", tmpWin)
+	// Mesmo papel ca o tao-servidor.conf do playbook de Linux: a URL do File
+	// Browser que Tao propón na pantalla de acceso. Tao léao ao lado do seu
+	// executable (tao/servidor.go), aquí C:\Program Files\Piztu. Vai antes do
+	// marcador final. ASCII e non UTF8: o UTF8 de PowerShell 5.1 mete BOM e
+	// Tao non recoñecería a liña de comentario. SÓ comiñas simples (dobradas por dentro): unha comiña
+	// dobre nun `cmd.run shell=powershell` de Salt en Windows rompe o paso do
+	// argumento e o comando acaba baixo cmd.exe.
+	if url := m.cfg.URLPublicaFileBrowser(); url != "" {
+		lit := func(t string) string { return "'" + strings.ReplaceAll(t, "'", "''") + "'" }
+		ps = strings.Replace(ps, "Write-Output ('Tao instalado en",
+			"Set-Content -Encoding ASCII -Path (Join-Path $dst 'tao-servidor.conf') -Value ("+
+				lit("# Xerado por Piztu ao instalar Tao. URL do servidor de ficheiros (File Browser).")+
+				",("+lit(url)+")); Write-Output ('Tao instalado en", 1)
+	}
+
+	m.paraleloCustom(hosts, cb, func(h string) (string, int) {
+		if err := sshkey.SubirFicheiro(h, usuario, keyPath, taoExeSrc, tmpSFTP); err != nil {
+			return "SFTP tao.exe: " + err.Error(), 1
+		}
+		out, rc := runSaltT(h, 300, []string{"cmd.run", ps, "shell=powershell"})
+		// saltOk daría por bo un cmd.run con saída baleira (retcode 0). O
+		// script remata cun marcador explícito: se non está, non correu.
+		if rc == 0 && !strings.Contains(out, "Tao instalado en") {
+			return "o script non confirmou a instalación (saída: " + strings.TrimSpace(out) + ")", 1
+		}
+		return out, rc
 	})
 	return nil
 }
@@ -214,8 +296,21 @@ func (m *MotorSalt) RecollerPracticas(hosts []string, cb Callbacks) error {
 // modelo de seguridade de Salt), e piztu corre como sesión de escritorio
 // normal. Require a regra sudoers NOPASSWD que instala o Paso 5 do
 // instalador (ver installer/main.go: instalarSaltMasterServidor).
+//
+// Usa un timeout curto (30 s): abonda para grains/test.ping e evita que unha
+// consulta a un minion apagado quede colgada. Para operacións longas
+// (state.apply, state.template_str, instalación de paquetes) usa runSaltT.
 func runSalt(host string, args []string) (string, int) {
-	cmd := exec.Command("sudo", append([]string{"-n", "salt", "--out=json", "--static", host}, args...)...)
+	return runSaltT(host, 30, args)
+}
+
+// runSaltT é runSalt cun timeout explícito en segundos (`salt -t`). Unha
+// instalación de programa (choco/apt/msi) pode levar varios minutos; co
+// timeout por defecto de 5 s do master, `salt` devolvería "No return
+// received" aínda que o minion siga traballando e remate ben.
+func runSaltT(host string, segundos int, args []string) (string, int) {
+	base := []string{"-n", "salt", "--out=json", "--static", "-t", strconv.Itoa(segundos), host}
+	cmd := exec.Command("sudo", append(base, args...)...)
 	cmd.Env = append(os.Environ(), "PYTHONUNBUFFERED=1")
 	out, _ := cmd.CombinedOutput()
 	rc := 0
@@ -238,6 +333,19 @@ func saltOk(host, stdout string, rc int) bool {
 	ret, ok := data[host]
 	if !ok {
 		return false
+	}
+	// Cando o .sls non compila (ex.: YAML cun path de Windows con '\' dentro
+	// dunha cadea entre comiñas dobres → "found unknown escape character") ou o
+	// minion lanza unha excepción, Salt devolve `data[host]` coma unha CADEA co
+	// traceback, non coma o mapa de estados. Sen isto, o `return true` do final
+	// daría por boa unha execución que non correu nada.
+	if s, ok := ret.(string); ok {
+		low := strings.ToLower(s)
+		for _, marca := range []string{"traceback (most recent call last)", "caused an exception", "rendererror", "rendering sls", "not a valid", "no minions matched"} {
+			if strings.Contains(low, marca) {
+				return false
+			}
+		}
 	}
 	if estados, ok := ret.(map[string]any); ok {
 		houbo := false
@@ -263,8 +371,10 @@ func saltOk(host, stdout string, rc int) bool {
 }
 
 func (m *MotorSalt) runParaleloSalt(hosts []string, args []string, cb Callbacks) {
+	// 20 min por host: state.apply / state.template_str poden incluír a
+	// instalación de paquetes, que non entra nos 30 s de runSalt.
 	m.paraleloCustom(hosts, cb, func(h string) (string, int) {
-		return runSalt(h, args)
+		return runSaltT(h, 1200, args)
 	})
 }
 

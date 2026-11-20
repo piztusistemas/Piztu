@@ -14,6 +14,39 @@
 {% set bloquear_rato = pillar.get('bloquear_rato', true) %}
 {% set bloquear_teclado = pillar.get('bloquear_teclado', true) %}
 
+{% if grains.get('os_family') == 'Windows' or 'cmd.exe' in grains.get('shell', '')|lower %}
+# ── Windows ──────────────────────────────────────────────────────────────────
+# Só se cobre o bloqueo de rede (internet/SSH) co Firewall de Windows: é
+# reversible e idempotente (as regras chámanse PIZTU_BLOQUEO / PIZTU_BLOQUEO_SSH
+# e bórranse antes de recrearse). O `delete rule` inicial falla en silencio se
+# aínda non existen (encadeado con `&`, non `&&`), así que o estado é idempotente.
+# O bloqueo de internet permite as redes privadas (RFC1918) para non cortar o
+# propio circuíto minion↔master de Salt, igual que fai a rama Linux.
+#
+# O mute do son e o bloqueo real de rato/teclado NON teñen equivalente por liña
+# de comandos en Windows sen axudante no equipo; no seu lugar amósase un aviso a
+# pantalla completa (ver máis abaixo).
+{% if bloquear_internet or bloquear_ssh %}
+bloquear_rede_windows:
+  cmd.run:
+    - name: 'netsh advfirewall firewall delete rule name=PIZTU_BLOQUEO & netsh advfirewall firewall delete rule name=PIZTU_BLOQUEO_SSH{% if bloquear_internet %} & netsh advfirewall firewall add rule name=PIZTU_BLOQUEO dir=out action=block remoteip=1.0.0.0-9.255.255.255,11.0.0.0-172.15.255.255,172.32.0.0-192.167.255.255,192.169.0.0-223.255.255.255{% endif %}{% if bloquear_ssh %} & netsh advfirewall firewall add rule name=PIZTU_BLOQUEO_SSH dir=out action=block protocol=TCP remoteport=22{% endif %} & echo Regras de firewall aplicadas'
+{% endif %}
+{% if bloquear_son or bloquear_rato or bloquear_teclado %}
+# Overlay a pantalla completa + bloqueo de rato/teclado (BlockInput) + mute do
+# son (Core Audio). O minion está na sesión 0 e non pode debuxar na pantalla do
+# alumno, así que win_bloqueo.ps1 programa unha tarefa ("PiztuBloqueo") que corre
+# NA sesión do usuario conectado e fai todo iso ata que se borra a bandeira
+# %ProgramData%\piztu_bloqueo.flag (o que fai desbloquearAula.sls).
+#
+# `cmd.script` (non `cmd.run` nin `file.managed`): descarga o .ps1 por salt://
+# co módulo `cp` (que si funciona neste minion, ao contrario que `file`) e
+# execútao — sen base64, sen límite de 8 KB da liña de comandos de cmd.exe.
+amosar_aviso_bloqueo_win:
+  cmd.script:
+    - source: salt://win_bloqueo.ps1
+    - shell: powershell
+{% endif %}
+{% else %}
 bloquear_entrada_e_avisar:
   cmd.run:
     - name: |
@@ -198,3 +231,4 @@ bloquear_rede:
         fi
     - shell: /bin/bash
 {% endif %}
+{% endif %}{# fin da rama por SO (Windows / resto) #}

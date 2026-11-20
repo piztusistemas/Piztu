@@ -5,6 +5,8 @@
   become: yes
   vars:
     filebrowser_root: /var/www/html/arquivos
+    # Cartafol de traballo/caché de Quantum (ver instalar_filebrowser.yaml)
+    filebrowser_state: /var/lib/filebrowser
 
   tasks:
     - name: 1. Deter e desactivar o servizo filebrowser
@@ -35,7 +37,16 @@
       loop:
         - /usr/local/bin/filebrowser
         - /etc/filebrowser
-        - /var/log/filebrowser.log
+        - "{{ filebrowser_state }}"
+        - /var/log/filebrowser.log     # só existía co File Browser clásico (Quantum loga ao journal)
+
+    - name: 4b. Retirar o proxy de Apache que publicaba File Browser no porto 80
+      # Só a configuración que escribiu a instalación (conf-available +
+      # conf-enabled); os módulos de proxy déixanse activados, que poden estar
+      # a ser usados por outros sitios do servidor.
+      shell: a2disconf piztu-filebrowser 2>/dev/null; rm -f /etc/apache2/conf-available/piztu-filebrowser.conf; systemctl reload apache2 2>/dev/null; true
+      when: apache_bin.stat.exists
+      changed_when: true
 
     - name: 4b. Retirar o proxy de Apache que publicaba File Browser no porto 80
       # Só a configuración que escribiu a instalación (conf-available +

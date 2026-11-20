@@ -4,6 +4,16 @@
 
 {% set usuario = pillar.get('usuario_alumno', 'usuario') %}
 
+{% if grains.get('os_family') == 'Windows' or 'cmd.exe' in grains.get('shell', '')|lower %}
+# En Windows: win_desbloqueo.ps1 borra a bandeira (o overlay do alumno libera
+# rato/teclado + son e péchase só), elimina a tarefa PiztuBloqueo e as regras de
+# firewall, e amosa un aviso de ~3 s na sesión do alumno. Vía `cmd.script`
+# (módulo `cp`, non `file`). Fonte: salt/win_desbloqueo.ps1
+desbloquear_windows:
+  cmd.script:
+    - source: salt://win_desbloqueo.ps1
+    - shell: powershell
+{% else %}
 activar_rato_e_teclado:
   cmd.run:
     - name: |
@@ -72,3 +82,4 @@ restaurar_rede:
           done
         done
     - shell: /bin/bash
+{% endif %}{# fin da rama por SO (Windows / resto) #}

@@ -1,7 +1,16 @@
 # salt/avisoRuido.sls
 # Espello de playbooks/avisoRuido.yaml — aviso emerxente de ruído excesivo.
 # Aplícase con:  salt <host> state.apply avisoRuido
+#
+# Rama por SO (ver apagar_aula.sls). En Windows: win_aviso_ruido.ps1 (popup na
+# sesión do alumno vía tarefa programada; `msg` non existe en Windows 11 Home).
 
+{% if grains.get('os_family') == 'Windows' or 'cmd.exe' in grains.get('shell', '')|lower %}
+mostrar_aviso_ruido:
+  cmd.script:
+    - source: salt://win_aviso_ruido.ps1
+    - shell: powershell
+{% else %}
 mostrar_aviso_ruido:
   cmd.run:
     - name: |
@@ -150,3 +159,4 @@ mostrar_aviso_ruido:
             --timeout=6 &
         fi
     - shell: /bin/bash
+{% endif %}

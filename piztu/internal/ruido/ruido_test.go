@@ -56,7 +56,7 @@ type motorFalso struct {
 	bloqueos []map[string]bool
 }
 
-func (m *motorFalso) Nome() string        { return "falso" }
+func (m *motorFalso) Nome() string         { return "falso" }
 func (m *motorFalso) GetEquipos() []string { return nil }
 func (m *motorFalso) ExecutarAccion(nomeLogico string, hosts []string, cb motor.Callbacks) error {
 	m.accions = append(m.accions, nomeLogico)

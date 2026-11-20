@@ -19,7 +19,7 @@ import {
     GetUmbral, GardarUmbral, GetRuidoConfig, GardarRuidoConfig,
     GetEstadoTao, AbrirTao,
     IniciarRuido, DetenerRuido, RuidoArmado,
-    XerarInventario, GetAulaConfig, DistribuirClaveSSH, EscanearRede, InstalarSalt, ComprobarSalt, InstalarAnsible,
+    XerarInventario, GetAulaConfig, DistribuirClaveSSH, PrepararClientesWindows, EscanearRede, InstalarSalt, ComprobarSalt, InstalarAnsible,
     InstalarTaoClientes,
     DescubrirRede, DistribuirClaveHosts,
 } from '../bindings/piztu/app';
@@ -270,6 +270,9 @@ document.querySelector('#app').innerHTML = `
                     </div>
                     <button class="btn-main lock config-btn" id="btn-distribuir-clave">Crear e enviar clave SSH</button>
                     <p class="modal-hint config-pre" id="cfg-ssh-resultado"></p>
+                    <button class="btn-main config-btn config-btn-secondary" id="btn-preparador-windows">🪟 Equipos Windows: xerar preparador</button>
+                    <p class="modal-hint" id="cfg-win-desc">Os equipos Windows non se poden preparar por rede dende aquí: xérase un script (cos datos desta aula) para levar nunha memoria USB e executar unha vez en cada equipo (dobre clic no .bat).</p>
+                    <p class="modal-hint config-pre" id="cfg-win-resultado"></p>
                 </div>
 
                 <div class="config-card">
@@ -473,6 +476,8 @@ function aplicarTraducionsInterno() {
     document.getElementById('cfg-p2-usuario-label').textContent = t('web.config.p2.usuario', 'Usuario dos equipos');
     document.getElementById('cfg-p2-pass-label').textContent = t('web.config.p2.pass', 'Contrasinal (sudo)');
     document.getElementById('btn-distribuir-clave').textContent = t('web.config.p2.distribuir', 'Crear e enviar clave SSH');
+    document.getElementById('btn-preparador-windows').textContent = t('web.config.p2.windows', '🪟 Equipos Windows: xerar preparador');
+    document.getElementById('cfg-win-desc').textContent = t('web.config.p2.windowsdesc', 'Os equipos Windows non se poden preparar por rede dende aquí: xérase un script (cos datos desta aula) para levar nunha memoria USB e executar unha vez en cada equipo (dobre clic no .bat).');
     document.getElementById('cfg-p3-titulo').textContent = t('web.config.p3.titulo', 'Rede');
     document.getElementById('cfg-p3-desc').textContent = t('web.config.p3.desc',
         'Detecta os equipos acendidos (por SSH) e garda a súa MAC no inventario, para poder acendelos por Wake-on-LAN.');
@@ -1298,6 +1303,24 @@ Events.On('ping_estado', (e) => ((d) => {
     pc.classList.toggle('offline', !d.online);
 })(e.data));
 
+// Equipo acendido pero o seu minion non contesta a Salt (← iniciarVixiaSalt,
+// saltsetup.AvisosMinions). Gárdase por host para volver pintalo cando
+// renderEquipos reconstrúe as tarxetas; a explicación completa vai no title.
+const avisosSalt = {};
+function pintarAvisoSalt(host) {
+    const el = document.querySelector(`.pc-aviso[data-host="${CSS.escape(host)}"]`);
+    if (!el) return;
+    const msg = avisosSalt[host] || '';
+    el.textContent = msg ? t('equipo.aviso.salt', 'Salt non responde') : '';
+    el.title = msg;
+    el.classList.toggle('activo', !!msg);
+}
+Events.On('salt_aviso', (e) => ((d) => {
+    if (d.msg) avisosSalt[d.host] = d.msg;
+    else delete avisosSalt[d.host];
+    pintarAvisoSalt(d.host);
+})(e.data));
+
 // Alumnado conectado con Tao por equipo (integrado en Go, ← internal/tao,
 // porte de core/tao.py + blueprints/tao.py).
 function pintarTao(estado) {
@@ -1442,6 +1465,7 @@ function renderEquipos(equipos) {
         pc.innerHTML = `
             <span class="pc-header" data-host="${e.nome}" title="${t('equipo.tip.abrirmover', 'Premer para abrir; arrastrar para mover')}">${e.nome}</span>
             <span class="pc-user" data-host="${e.nome}"></span>
+            <span class="pc-aviso" data-host="${e.nome}"></span>
             <span class="pc-publicacions" data-host="${e.nome}"></span>
             <div class="controls">
                 <button class="btn on" data-acc="acenderAula" title="${t('web.acender', 'Acender')}"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 4v5"/><path d="M6.2 6A5.5 5.5 0 1 0 13.8 6"/></svg></button>
@@ -1487,6 +1511,7 @@ function renderEquipos(equipos) {
             recollerEquipo(e.nome);
         });
         escenario.appendChild(pc);
+        pintarAvisoSalt(e.nome);
     });
     renderSeleccionManual(equipos);
 }
@@ -1769,6 +1794,21 @@ document.getElementById('btn-distribuir-clave').addEventListener('click', () => 
     res.textContent = '⏳ Xerando e enviando clave…';
     log('[CLAVE] ' + t('log.clave.iniciando', 'iniciando distribución da clave SSH…'));
     DistribuirClaveSSH(usuario, pass);
+});
+
+// Preparador dos equipos Windows: xérase cos datos da aula e ábrese o cartafol.
+document.getElementById('btn-preparador-windows').addEventListener('click', () => {
+    const res = document.getElementById('cfg-win-resultado');
+    const btn = document.getElementById('btn-preparador-windows');
+    btn.disabled = true;
+    PrepararClientesWindows()
+        .then((dir) => {
+            res.textContent = t('web.config.p2.windowsok', '✅ Preparador listo en') + ' ' + dir +
+                '\n' + t('web.config.p2.windowsuso', 'Copia o cartafol a unha memoria USB e, en cada equipo Windows, dobre clic en preparar_cliente_windows.bat.');
+            log('[WINDOWS] preparador xerado en ' + dir);
+        })
+        .catch((err) => { res.textContent = '❌ ' + err; })
+        .finally(() => { btn.disabled = false; });
 });
 
 Events.On('clave_log', (e) => ((d) => {

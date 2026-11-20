@@ -289,6 +289,7 @@ func (a *App) ServiceStartup(ctx context.Context, options application.ServiceOpt
 
 	a.configurarRuido()
 	a.iniciarPing()
+	a.iniciarVixiaSalt()
 	a.iniciarRecolectores()
 
 	// Os monitores dos módulos só arrancan se o seu módulo está activo: un
@@ -455,6 +456,21 @@ func (a *App) localizarTao() (string, bool) {
 	return "", false
 }
 
+// localizarTaoWindows busca o binario de Tao compilado para Windows
+// (tao/build-windows.sh) no servidor, para poder instalalo nos equipos
+// cliente Windows da aula. Vai xunto ao `tao` de Linux, ou solto en base_dir.
+func (a *App) localizarTaoWindows() (string, bool) {
+	for _, p := range []string{
+		filepath.Join(a.cfg.ModulosDir, "tao", "tao.exe"),
+		filepath.Join(a.cfg.BaseDir, "tao.exe"),
+	} {
+		if _, err := os.Stat(p); err == nil {
+			return p, true
+		}
+	}
+	return "", false
+}
+
 // iniciarPing arranca o monitor de ping (porte Go de main.py:_iniciar_ping_loop),
 // que comproba periodicamente por ICMP se cada equipo do mapa está acendido.
 func (a *App) iniciarPing() {
@@ -471,6 +487,43 @@ func (a *App) iniciarPing() {
 		},
 	})
 	a.ping.Iniciar()
+}
+
+// iniciarVixiaSalt avisa no mapa ("salt_aviso") dos equipos acendidos cuxo
+// minion non contesta a Salt (ver saltsetup.AvisosMinions): sen isto, "Bloquear"
+// cun minion mal configurado non fai nada e non se ve por que. Só traballa co
+// motor Salt activo; con outro motor limpa os avisos que houbese. Emite só os
+// cambios, e o primeiro repaso agarda a que o ping teña datos.
+func (a *App) iniciarVixiaSalt() {
+	go func() {
+		ultimo := map[string]string{}
+		espera := 20 * time.Second
+		for {
+			time.Sleep(espera)
+			espera = time.Minute
+			avisos := map[string]string{}
+			if motor.MotorActivo(a.cfg) == "salt" && motor.HaiSaltMaster() {
+				a.acendidosMu.Lock()
+				acendidos := make(map[string]bool, len(a.acendidos))
+				for h, v := range a.acendidos {
+					acendidos[h] = v
+				}
+				a.acendidosMu.Unlock()
+				avisos = saltsetup.AvisosMinions(motor.Get(a.cfg, "").GetEquipos(), acendidos)
+			}
+			for h := range ultimo {
+				if _, ok := avisos[h]; !ok {
+					avisos[h] = ""
+				}
+			}
+			for h, msg := range avisos {
+				if ultimo[h] != msg {
+					emitirEvento("salt_aviso", map[string]any{"host": h, "msg": msg})
+				}
+			}
+			ultimo = avisos
+		}
+	}()
 }
 
 // iniciarRecolectores arranca o monitor que executa as ordes declaradas polos
@@ -1671,54 +1724,95 @@ func (a *App) InstalarTaoClientes() {
 			rematar(false, 0)
 			return
 		}
-		taoSrc, ok := a.localizarTao()
-		if !ok {
-			emit("", "❌ non se atopa Tao neste servidor — instálao primeiro (⚙ Aula → Módulos → Tao)")
-			rematar(false, 0)
-			return
-		}
-
-		// A icona vai embebida en piztu (a mesma que usa o instalador);
-		// escríbese nun temporal só porque o playbook a copia por SSH cun
-		// `copy: src=`, que precisa dunha ruta de ficheiro real.
-		taoIconSrc := ""
-		if iconTmp, err := os.CreateTemp(a.cfg.TmpDir, "tao_icon_*.png"); err == nil {
-			if _, err := iconTmp.Write(recursos.IconaTao()); err == nil {
-				taoIconSrc = iconTmp.Name()
-				defer os.Remove(taoIconSrc)
-			}
-			iconTmp.Close()
-		}
-
 		hosts := motor.Get(a.cfg, "ansible").GetEquipos()
 		if len(hosts) == 0 {
 			emit("", "⚠️ non hai equipos no inventario")
 			rematar(false, 0)
 			return
 		}
-		ansible, ok := motor.Get(a.cfg, "ansible").(*motor.MotorAnsible)
-		if !ok {
-			emit("", "❌ erro interno: motor Ansible non dispoñible")
-			rematar(false, 0)
-			return
+
+		// Aula posiblemente mixta: cada equipo pola súa vía.
+		//  · Linux/descoñecido → playbook Ansible de sempre (/opt/piztu/tao + .desktop).
+		//  · Windows → tao.exe por SFTP + atallos .lnk, vía Salt: o minion corre
+		//    coma SYSTEM, único xeito de escribir en C:\Program Files.
+		sos := motor.SOsDeHosts(a.cfg.HostsFile, hosts)
+		var linuxHosts, winHosts, descoñecidos []string
+		for _, h := range hosts {
+			switch sos[h] {
+			case motor.SOWindows:
+				winHosts = append(winHosts, h)
+			case motor.SODescoñecido:
+				// SO sen determinar: normalmente o minion Salt non responde.
+				// Trátase coma Linux (o defecto seguro), pero avísase — se
+				// fose un Windows, o playbook Ansible fallaría cun erro POSIX
+				// que non di a verdadeira causa.
+				descoñecidos = append(descoñecidos, h)
+				linuxHosts = append(linuxHosts, h)
+			default:
+				linuxHosts = append(linuxHosts, h)
+			}
+		}
+		if len(descoñecidos) > 0 {
+			emit("", "⚠️ non se puido determinar o SO de "+strings.Join(descoñecidos, ", ")+
+				" (¿minion Salt sen resposta? proba `salt <equipo> test.ping`). Inténtase coma Linux."+
+				" Se é Windows, engade `ansible_shell_type=powershell` na súa liña do inventario (hosts).")
 		}
 
-		emit("", fmt.Sprintf("Instalando Tao en %d equipo(s)…", len(hosts)))
-		fallo := false
-		err := ansible.InstalarTaoClientes(hosts, taoSrc, taoIconSrc, motor.Callbacks{
-			OnOk: func(host, _ string) {
-				emit(host, "✔ instalado")
-			},
-			OnErro: func(host, saida string) {
-				fallo = true
-				emit(host, "✖ erro: "+extraerErro(saida))
-			},
-		})
-		if err != nil {
-			emit("", "❌ "+err.Error())
-			rematar(false, len(hosts))
-			return
+		var fallo bool
+		cb := motor.Callbacks{
+			OnOk:   func(host, _ string) { emit(host, "✔ instalado") },
+			OnErro: func(host, saida string) { fallo = true; emit(host, "✖ erro: "+extraerErro(saida)) },
 		}
+
+		// ── Equipos Linux ──────────────────────────────────────────────────
+		if len(linuxHosts) > 0 {
+			taoSrc, ok := a.localizarTao()
+			if !ok {
+				fallo = true
+				emit("", "❌ non se atopa o Tao de Linux neste servidor — instálao primeiro (⚙ Aula → Módulos → Tao)")
+			} else {
+				// A icona vai embebida en piztu; escríbese nun temporal só
+				// porque o playbook a copia por SSH cun `copy: src=`.
+				taoIconSrc := ""
+				if iconTmp, err := os.CreateTemp(a.cfg.TmpDir, "tao_icon_*.png"); err == nil {
+					if _, err := iconTmp.Write(recursos.IconaTao()); err == nil {
+						taoIconSrc = iconTmp.Name()
+						defer os.Remove(taoIconSrc)
+					}
+					iconTmp.Close()
+				}
+				if ansible, ok := motor.Get(a.cfg, "ansible").(*motor.MotorAnsible); !ok {
+					fallo = true
+					emit("", "❌ erro interno: motor Ansible non dispoñible")
+				} else {
+					emit("", fmt.Sprintf("Instalando Tao en %d equipo(s) Linux…", len(linuxHosts)))
+					if err := ansible.InstalarTaoClientes(linuxHosts, taoSrc, taoIconSrc, cb); err != nil {
+						fallo = true
+						emit("", "❌ "+err.Error())
+					}
+				}
+			}
+		}
+
+		// ── Equipos Windows ────────────────────────────────────────────────
+		if len(winHosts) > 0 {
+			taoExe, ok := a.localizarTaoWindows()
+			if !ok {
+				fallo = true
+				emit("", fmt.Sprintf("❌ hai %d equipo(s) Windows na aula pero non hai tao.exe no servidor — compílao (tao/build-windows.sh) e ponno en %s",
+					len(winHosts), filepath.Join(a.cfg.ModulosDir, "tao", "tao.exe")))
+			} else if sm, ok := motor.Get(a.cfg, "salt").(*motor.MotorSalt); !ok {
+				fallo = true
+				emit("", "❌ erro interno: motor Salt non dispoñible (necesario para instalar Tao en Windows)")
+			} else {
+				emit("", fmt.Sprintf("Instalando Tao en %d equipo(s) Windows…", len(winHosts)))
+				if err := sm.InstalarTaoClientesWindows(winHosts, taoExe, cb); err != nil {
+					fallo = true
+					emit("", "❌ "+err.Error())
+				}
+			}
+		}
+
 		emit("", "Feito.")
 		rematar(!fallo, len(hosts))
 	}()
