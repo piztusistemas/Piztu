@@ -11,7 +11,6 @@
 //	cp -r ../playbooks recursos/playbooks
 //	cp -r ../salt      recursos/salt
 //	cp -r ../idiomas   recursos/idiomas
-//	cp ../clientes_windows/* recursos/clientes_windows/
 package recursos
 
 import (
@@ -30,23 +29,8 @@ var saltFS embed.FS
 //go:embed all:idiomas
 var idiomasFS embed.FS
 
-//go:embed all:clientes_windows
-var clientesWindowsFS embed.FS
-
 //go:embed tao-icon.png
 var taoIconPNG []byte
-
-// PreparadorWindows devolve o preparador dos equipos Windows do alumnado
-// (copia de ../clientes_windows/): o .ps1 coas marcas @@SERVIDOR@@,
-// @@CLAVE_PUBLICA@@ e @@USUARIO@@ sen substituír, e o .bat que o
-// lanza coma administrador. Ver App.PrepararClientesWindows.
-func PreparadorWindows() (ps1, bat []byte, err error) {
-	if ps1, err = clientesWindowsFS.ReadFile("clientes_windows/preparar_cliente_windows.ps1"); err != nil {
-		return nil, nil, err
-	}
-	bat, err = clientesWindowsFS.ReadFile("clientes_windows/preparar_cliente_windows.bat")
-	return ps1, bat, err
-}
 
 // ScriptSalt devolve un ficheiro embebido de recursos/salt (ex.
 // "win_bloqueo.ps1"). Úsao o motor SSH para os equipos Windows, que executa

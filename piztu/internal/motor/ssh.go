@@ -48,15 +48,15 @@ func (m *MotorSSH) ExecutarAccion(accion string, hosts []string, cb Callbacks) e
 		enviarWoL(m.cfg, hosts, cb)
 		return nil
 	case "durmir", "durmirAula":
-		m.correrSO(hosts, scriptDurmir, psDurmir, cb)
+		m.correrSO(hosts, scriptDurmir, soAdmin(psDurmir), cb)
 	case "apagar", "apagar_aula":
-		m.correrSO(hosts, scriptApagar, psApagar, cb)
+		m.correrSO(hosts, scriptApagar, soAdmin(psApagar), cb)
 	case "reiniciar", "reiniciarAula":
-		m.correrSO(hosts, scriptReiniciar, psReiniciar, cb)
+		m.correrSO(hosts, scriptReiniciar, soAdmin(psReiniciar), cb)
 	case "liberar", "desbloquear", "desbloquearAula":
-		m.correrSO(hosts, scriptDesbloquear, psScriptSalt("win_desbloqueo.ps1"), cb)
+		m.correrSO(hosts, scriptDesbloquear, soAdmin(psScriptSalt("win_desbloqueo.ps1")), cb)
 	case "aviso_ruido", "avisoRuido":
-		m.correrSO(hosts, scriptAvisoRuido, psScriptSalt("win_aviso_ruido.ps1"), cb)
+		m.correrSO(hosts, scriptAvisoRuido, soAdmin(psScriptSalt("win_aviso_ruido.ps1")), cb)
 	case "comprobar_bloqueo":
 		m.correrSO(hosts, scriptComprobarBloqueo, psComprobarBloqueo, cb)
 	default:

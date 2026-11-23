@@ -63,13 +63,13 @@ entrada na sesión do alumno. Solución universal (Win7→11, calquera edición)
 
 ## Preparar un equipo Windows
 
-Unha vez por equipo: ⚙ Aula → Clave SSH → «🪟 Equipos Windows: xerar
-preparador», e no PC Windows dobre clic en `preparar_cliente_windows.bat`
-(fonte: `clientes_windows/`). Instala OpenSSH Server, fai administradora a
-conta da aula, autoriza a clave, instala o Salt minion (id = nome do
-inventario), abre o ping e activa Wake-on-LAN.
+Faise a man, unha vez por equipo: ver `clientes_windows/README.md`. A conta
+da aula é **estándar** (non administradora); o que precisa permisos faino este
+minion, que corre como SYSTEM. Por iso, nas aulas con Windows, o motor é Salt.
 
 ## Outros motores
 
 - **SSH**: executa os mesmos `win_*.ps1` por SSH + PowerShell (`piztu/internal/motor/ssh_win.go`).
-- **Ansible**: os equipos Windows desvíanse ao camiño do motor SSH (`derivarWindows`).
+  Precisa que a conta da aula sexa administradora; cunha conta estándar o
+  equipo devolve "acceso denegado" e Piztu indica que se use o motor Salt.
+- **Ansible**: os equipos Windows desvíanse ao camiño do motor SSH (`derivarWindows`), coa mesma limitación.

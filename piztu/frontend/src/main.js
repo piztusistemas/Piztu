@@ -19,7 +19,7 @@ import {
     GetUmbral, GardarUmbral, GetRuidoConfig, GardarRuidoConfig,
     GetEstadoTao, AbrirTao,
     IniciarRuido, DetenerRuido, RuidoArmado,
-    XerarInventario, GetAulaConfig, DistribuirClaveSSH, PrepararClientesWindows, EscanearRede, InstalarSalt, ComprobarSalt, InstalarAnsible,
+    XerarInventario, GetAulaConfig, DistribuirClaveSSH, EscanearRede, InstalarSalt, ComprobarSalt, InstalarAnsible,
     InstalarTaoClientes,
     DescubrirRede, DistribuirClaveHosts,
 } from '../bindings/piztu/app';
@@ -270,9 +270,6 @@ document.querySelector('#app').innerHTML = `
                     </div>
                     <button class="btn-main lock config-btn" id="btn-distribuir-clave">Crear e enviar clave SSH</button>
                     <p class="modal-hint config-pre" id="cfg-ssh-resultado"></p>
-                    <button class="btn-main config-btn config-btn-secondary" id="btn-preparador-windows">🪟 Equipos Windows: xerar preparador</button>
-                    <p class="modal-hint" id="cfg-win-desc">Os equipos Windows non se poden preparar por rede dende aquí: xérase un script (cos datos desta aula) para levar nunha memoria USB e executar unha vez en cada equipo (dobre clic no .bat).</p>
-                    <p class="modal-hint config-pre" id="cfg-win-resultado"></p>
                 </div>
 
                 <div class="config-card">
@@ -476,8 +473,6 @@ function aplicarTraducionsInterno() {
     document.getElementById('cfg-p2-usuario-label').textContent = t('web.config.p2.usuario', 'Usuario dos equipos');
     document.getElementById('cfg-p2-pass-label').textContent = t('web.config.p2.pass', 'Contrasinal (sudo)');
     document.getElementById('btn-distribuir-clave').textContent = t('web.config.p2.distribuir', 'Crear e enviar clave SSH');
-    document.getElementById('btn-preparador-windows').textContent = t('web.config.p2.windows', '🪟 Equipos Windows: xerar preparador');
-    document.getElementById('cfg-win-desc').textContent = t('web.config.p2.windowsdesc', 'Os equipos Windows non se poden preparar por rede dende aquí: xérase un script (cos datos desta aula) para levar nunha memoria USB e executar unha vez en cada equipo (dobre clic no .bat).');
     document.getElementById('cfg-p3-titulo').textContent = t('web.config.p3.titulo', 'Rede');
     document.getElementById('cfg-p3-desc').textContent = t('web.config.p3.desc',
         'Detecta os equipos acendidos (por SSH) e garda a súa MAC no inventario, para poder acendelos por Wake-on-LAN.');
@@ -1794,21 +1789,6 @@ document.getElementById('btn-distribuir-clave').addEventListener('click', () => 
     res.textContent = '⏳ Xerando e enviando clave…';
     log('[CLAVE] ' + t('log.clave.iniciando', 'iniciando distribución da clave SSH…'));
     DistribuirClaveSSH(usuario, pass);
-});
-
-// Preparador dos equipos Windows: xérase cos datos da aula e ábrese o cartafol.
-document.getElementById('btn-preparador-windows').addEventListener('click', () => {
-    const res = document.getElementById('cfg-win-resultado');
-    const btn = document.getElementById('btn-preparador-windows');
-    btn.disabled = true;
-    PrepararClientesWindows()
-        .then((dir) => {
-            res.textContent = t('web.config.p2.windowsok', '✅ Preparador listo en') + ' ' + dir +
-                '\n' + t('web.config.p2.windowsuso', 'Copia o cartafol a unha memoria USB e, en cada equipo Windows, dobre clic en preparar_cliente_windows.bat.');
-            log('[WINDOWS] preparador xerado en ' + dir);
-        })
-        .catch((err) => { res.textContent = '❌ ' + err; })
-        .finally(() => { btn.disabled = false; });
 });
 
 Events.On('clave_log', (e) => ((d) => {

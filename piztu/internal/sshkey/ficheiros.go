@@ -276,9 +276,10 @@ func copiarDeSftp(sc *sftp.Client, remoto, local string) error {
 
 // EjecutarPowerShell executa `script` (PowerShell) nun cliente Windows con
 // OpenSSH Server, autenticándose por clave como `usuario`. En Windows non hai
-// sudo: o usuario ten que ser ADMINISTRADOR local (OpenSSH dálle a unha conta
-// de Administradores un token elevado, sen UAC), igual que en Linux se lle pide
-// NOPASSWD. Úsao o motor SSH para os equipos Windows.
+// sudo: para as accións de administración o usuario ten que ser ADMINISTRADOR
+// local (OpenSSH dálle a unha conta de Administradores un token elevado, sen
+// UAC). Desde a 26.12.2 a conta da aula é estándar e esas accións van polo
+// motor Salt; ver motor.psSoAdmin. Úsao o motor SSH para os equipos Windows.
 //
 // O script sóbese por SFTP a un .ps1 no perfil do usuario e lánzase con
 // `-File` en vez de -EncodedCommand: os scripts de bloqueo pasan dos 8 KB que
@@ -337,7 +338,7 @@ func EjecutarPowerShell(host, usuario, keyPath, script string) (string, error) {
 // SondarSO pregunta a un equipo polo seu SO por SSH, sen saber de antemán que
 // shell ten. Dúas ordes en sesións separadas, NON `uname -s || ver` nunha soa:
 // en Windows a shell por defecto de OpenSSH pode ser cmd.exe OU PowerShell
-// (DefaultShell no rexistro, o preparador pona en PowerShell), e no Windows
+// (DefaultShell no rexistro; de serie cmd.exe, pero alguén pode poñela en PowerShell), e no Windows
 // PowerShell 5.1 `||` é un erro de sintaxe — a sonda devolvía só ese erro, o
 // equipo quedaba coma SODescoñecido e tratábase coma Linux (visto en bac01:
 // "Bloquear" mandaba bash con sudo e non facía nada).

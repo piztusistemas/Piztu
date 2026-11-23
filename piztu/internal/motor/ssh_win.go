@@ -1,7 +1,9 @@
 // ssh_win.go: soporte de equipos Windows no motor SSH (aula Windows ou
 // mixta). Os scripts de ssh.go son bash con `sudo`; nun Windows con OpenSSH
 // Server execútase PowerShell no seu lugar (sshkey.EjecutarPowerShell), coa
-// conta de ssh_user como ADMINISTRADORA local.
+// conta de ssh_user. As accións de administración só funcionan se esa conta é
+// ADMINISTRADORA local; desde a 26.12.2 a conta da aula é estándar e o
+// camiño recomendado para Windows é o motor Salt (ver psSoAdmin).
 //
 // Os scripts grandes (bloqueo, desbloqueo, aviso) son OS MESMOS .ps1 que os
 // estados Salt mandan con `cmd.script salt://…` (recursos/salt/win_*.ps1):
@@ -21,6 +23,37 @@ import (
 	"piztu/internal/sshkey"
 	"piztu/recursos"
 )
+
+// psSoAdmin vai diante de cada script Windows que precisa permisos de
+// administrador (todos menos psComprobarBloqueo, que só le). Desde a 26.12.2 a
+// conta da aula en Windows é ESTÁNDAR e as accións van polo minion de Salt
+// (SYSTEM); cunha conta estándar, os netsh/schtasks/ProgramData dos scripts
+// fallarían en silencio (van a Out-Null) e a acción daríase por boa sen facer
+// nada. Así o equipo responde co marcador e correrWindows explica a causa.
+const psSoAdmin = "if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { 'PIZTU_SEN_ADMIN'; exit 3 }\n"
+
+// marcaSenAdmin é a saída de psSoAdmin cando a conta non é administradora.
+const marcaSenAdmin = "PIZTU_SEN_ADMIN"
+
+// soAdmin antepón psSoAdmin a un script Windows ("" segue sendo "": sen
+// equivalente).
+func soAdmin(script string) string {
+	if strings.TrimSpace(script) == "" {
+		return ""
+	}
+	return psSoAdmin + script
+}
+
+// erroWindows traduce a saída dun script fallido nun Windows a unha mensaxe
+// para o profesorado.
+func erroWindows(usuario, saida string) string {
+	if strings.Contains(saida, marcaSenAdmin) {
+		return "a conta '" + usuario + "' non é administradora neste equipo Windows (é o normal desde a 26.12.2): " +
+			"os motores SSH e Ansible non poden facer esta acción en Windows. Usa o motor Salt, que a fai co minion coma SYSTEM " +
+			"(ver clientes_windows/README.md)."
+	}
+	return saida
+}
 
 // Ordes curtas (cmd/PowerShell) para os equipos Windows. "" = sen equivalente.
 const (
@@ -68,7 +101,7 @@ func psBloqueo(o map[string]bool) string {
 		b.WriteString("\n")
 	}
 	b.WriteString("'bloqueo aplicado'\n")
-	return b.String()
+	return soAdmin(b.String())
 }
 
 // correrSO executa cada host co script do seu SO: `linux` (bash, como root,
@@ -114,7 +147,7 @@ func (m *MotorSSH) correrWindows(hosts []string, script string, cb Callbacks) {
 			defer func() { <-sem }()
 			out, err := sshkey.EjecutarPowerShell(host, usuario, keyPath, script)
 			if err != nil {
-				cb.erro(host, err.Error())
+				cb.erro(host, erroWindows(usuario, err.Error()))
 				return
 			}
 			cb.ok(host, out)
